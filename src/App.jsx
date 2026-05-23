@@ -219,9 +219,23 @@ export default function App() {
       profit >= 0 ? 'buy' : 'err')
   }
 
-  const handleAddStock = (sectorId, stock) => {
+  const handleAddStock = async (sectorId, stock) => {
+    // 1. 先加入（用已取得的 base 價格產生暫時 K 線）
+    if (!CANDLES_CACHE[stock.code] && stock.base > 1) {
+      CANDLES_CACHE[stock.code] = generateCandles(stock.base, stock.code)
+    }
     addStock(sectorId, stock)
-    pop(`✅ ${stock.name || stock.code} 已加入`, 'buy')
+    pop(`✅ ${stock.name || stock.code} 已加入，載入真實 K 線...`, 'buy')
+
+    // 2. 立即從 Yahoo Finance 抓真實 K 線
+    try {
+      const real = await fetchRealCandles(stock.code, stock.otc === true)
+      if (real && real.length >= 5) {
+        CANDLES_CACHE[stock.code] = real
+        // 強制重新渲染
+        setLoadedSectors(p => ({ ...p, [sectorId]: Date.now() }))
+      }
+    } catch {}
   }
 
   const pendingCnt = signals.filter(s => !s.done).length
