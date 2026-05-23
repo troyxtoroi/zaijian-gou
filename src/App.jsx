@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { SECTORS, INITIAL_CAPITAL } from './data/sectors.js'
+import { DEFAULT_API_KEY } from './config.js'
 import {
   CANDLES_CACHE, initCandleCache, loadRealCandlesForSector,
   calcMA, calcRSI,
@@ -30,7 +31,7 @@ export default function App() {
   const [holdings,  setHoldings]  = useState([])
   const [busy,      setBusy]      = useState(false)
   const [toast,     setToast]     = useState(null)
-  const [apiKey,    setApiKey]    = useState('')
+  const [apiKey,    setApiKey]    = useState(DEFAULT_API_KEY)
   const [showKey,   setShowKey]   = useState(false)
   // track which sectors have had real data loaded
   const [loadedSectors, setLoadedSectors] = useState({})
