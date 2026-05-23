@@ -180,7 +180,8 @@ export default function App() {
       }
 
       setAnalyses(p => ({ ...p, [stock.code]: result }))
-      if (result.signal === '買入' && result.confidence >= 65) {
+      const alreadyHasSignal = signals.some(s => s.stock.code === stock.code)
+      if (!alreadyHasSignal && result.signal === '買入' && result.confidence >= 65) {
         const sig = { id: Date.now() + Math.random(), stock, analysis: result,
           price: cs[cs.length - 1].close, time: new Date(), done: false }
         setSignals(p => [sig, ...p].slice(0, 15))
