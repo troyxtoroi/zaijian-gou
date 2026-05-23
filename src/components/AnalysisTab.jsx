@@ -1,8 +1,8 @@
-import { SECTORS } from '../data/sectors.js'
+// sectors passed via props
 import { CANDLES_CACHE, calcMA, calcRSI } from '../services/stockApi.js'
 import CandleChart from './CandleChart.jsx'
 
-export default function AnalysisTab({ stock, sectorKey, analysis, busy, onReanalyze }) {
+export default function AnalysisTab({ stock, sectorKey, allSectors, analysis, busy, onReanalyze }) {
   if (!stock) {
     return (
       <div style={{ textAlign: 'center', color: '#475569', padding: '70px 0' }}>
@@ -24,7 +24,7 @@ export default function AnalysisTab({ stock, sectorKey, analysis, busy, onReanal
   const ma10  = calcMA(cs, 10)
   const ma20  = calcMA(cs, 20)
   const rsi14 = calcRSI(cs, 14)
-  const sec   = SECTORS[sectorKey]
+  const sec   = allSectors?.[sectorKey]
   const sColor = sec?.color || '#818cf8'
 
   const sigColor = a =>
