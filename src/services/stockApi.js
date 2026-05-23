@@ -1,6 +1,6 @@
 /**
- * Stock data service — 真實股價 via Yahoo Finance (CORS proxy)
- * Fallback to deterministic simulation if fetch fails.
+ * Stock data service — 真實股價 via 多重 CORS proxy 嘗試
+ * 失敗時 fallback 到 sectors.js 的基準價格模擬數據
  */
 
 /* ── Simulated data (fallback) ─────────────────────────── */
@@ -38,33 +38,56 @@ export function generateCandles(base, code, n = 30) {
   return candles
 }
 
-/* ── Real data via Yahoo Finance + allorigins CORS proxy ── */
+/* ── 多重 CORS proxy 嘗試 ──────────────────────────────── */
+const PROXIES = [
+  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  (url) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+]
+
+async function fetchViaProxy(yahooUrl) {
+  for (const makeProxy of PROXIES) {
+    try {
+      const proxyUrl = makeProxy(yahooUrl)
+      const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) })
+      if (!res.ok) continue
+
+      const text = await res.text()
+      // allorigins wraps in { contents: "..." }
+      let raw = text
+      try {
+        const wrapper = JSON.parse(text)
+        if (wrapper.contents) raw = wrapper.contents
+      } catch {}
+
+      const chart = JSON.parse(raw)
+      if (chart.chart?.error || !chart.chart?.result?.[0]) continue
+
+      const result     = chart.chart.result[0]
+      const timestamps = result.timestamp
+      const q          = result.indicators.quote[0]
+
+      const candles = timestamps
+        .map((ts, i) => ({
+          date:   new Date(ts * 1000),
+          open:   parseFloat((q.open[i]  ?? 0).toFixed(2)),
+          high:   parseFloat((q.high[i]  ?? 0).toFixed(2)),
+          low:    parseFloat((q.low[i]   ?? 0).toFixed(2)),
+          close:  parseFloat((q.close[i] ?? 0).toFixed(2)),
+          volume: q.volume[i] || 0,
+        }))
+        .filter(c => c.close > 0 && c.open > 0 && !isNaN(c.close))
+
+      if (candles.length >= 5) return candles
+    } catch {}
+  }
+  throw new Error('all proxies failed')
+}
+
 export async function fetchRealCandles(code, days = 40) {
   const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${code}.TW?interval=1d&range=3mo`
-  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(yahooUrl)}`
-
-  const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) })
-  if (!res.ok) throw new Error('proxy error')
-
-  const wrapper = await res.json()
-  const chart   = JSON.parse(wrapper.contents)
-  if (chart.chart?.error || !chart.chart?.result?.[0]) throw new Error('no data')
-
-  const result     = chart.chart.result[0]
-  const timestamps = result.timestamp
-  const q          = result.indicators.quote[0]
-
-  return timestamps
-    .map((ts, i) => ({
-      date:   new Date(ts * 1000),
-      open:   parseFloat((q.open[i]  ?? 0).toFixed(2)),
-      high:   parseFloat((q.high[i]  ?? 0).toFixed(2)),
-      low:    parseFloat((q.low[i]   ?? 0).toFixed(2)),
-      close:  parseFloat((q.close[i] ?? 0).toFixed(2)),
-      volume: q.volume[i] || 0,
-    }))
-    .filter(c => c.close > 0 && c.open > 0 && !isNaN(c.close))
-    .slice(-days)
+  const candles = await fetchViaProxy(yahooUrl)
+  return candles.slice(-days)
 }
 
 /* ── Candle cache ─────────────────────────────────────────── */
@@ -79,13 +102,16 @@ export function initCandleCache(sectors) {
 }
 
 export async function loadRealCandlesForSector(stocks) {
-  await Promise.all(
+  await Promise.allSettled(
     stocks.map(async (st) => {
       try {
         const real = await fetchRealCandles(st.code)
-        if (real.length >= 10) CANDLES_CACHE[st.code] = real
-      } catch {
-        // keep simulated data
+        if (real.length >= 5) {
+          CANDLES_CACHE[st.code] = real
+          console.log(`✅ ${st.code} ${st.name}: 真實資料 ${real.length} 根`)
+        }
+      } catch (e) {
+        console.warn(`⚠️ ${st.code} ${st.name}: 使用模擬資料 (${e.message})`)
       }
     })
   )
