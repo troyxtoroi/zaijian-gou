@@ -125,16 +125,16 @@ export default function App() {
 
       let result
       if (analyzeMode === 'local' || !apiKey) {
-        result = analyzeLocally({ stock, candles: cs, ma5, ma10, ma20 })
+        result = analyzeLocally({ stock, candles: cs, ma5, ma10, ma20, sectorKey: sKey })
         result.isLocal = true
       } else {
         try {
-          result = await analyzeStock({ stock, candles: cs, ma5, ma10, ma20, rsi14, apiKey })
+          result = await analyzeStock({ stock, candles: cs, ma5, ma10, ma20, rsi14, apiKey, sectorKey: sKey })
           result.isLocal = false
         } catch (e) {
           if (e.message === 'NO_CREDITS') pop('⚠️ API 餘額不足，請至 console.anthropic.com/settings/billing 儲值', 'err')
           if (e.message === 'INVALID_KEY') { setApiKey(''); setShowKey(true) }
-          result = analyzeLocally({ stock, candles: cs, ma5, ma10, ma20 })
+          result = analyzeLocally({ stock, candles: cs, ma5, ma10, ma20, sectorKey: sKey })
           result.isLocal = true
         }
       }
