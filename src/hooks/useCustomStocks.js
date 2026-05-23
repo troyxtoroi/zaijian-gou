@@ -1,80 +1,80 @@
 import { useState, useEffect } from 'react'
 
-const LS_SECTORS = 'zaijian_custom_sectors'
-const LS_STOCKS  = 'zaijian_custom_stocks'
+const LS_SECTORS  = 'zaijian_custom_sectors'
+const LS_STOCKS   = 'zaijian_custom_stocks'
+const LS_EXTRAS   = 'zaijian_builtin_extras'   // 加到原有族群的自選股
 
-const SECTOR_COLORS = [
-  '#f472b6', '#a78bfa', '#34d399', '#fbbf24',
-  '#60a5fa', '#f87171', '#2dd4bf', '#fb923c',
-]
+const COLORS = ['#f472b6','#a78bfa','#34d399','#fbbf24','#60a5fa','#f87171','#2dd4bf','#fb923c']
+const BUILTIN_KEYS = ['ai','memory','satellite','passive','thermal','packaging']
 
-function loadFromLS(key, fallback) {
-  try { return JSON.parse(localStorage.getItem(key)) ?? fallback }
-  catch { return fallback }
+function fromLS(key, fb) {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fb } catch { return fb }
 }
 
 export function useCustomStocks() {
-  const [customSectors, setCustomSectors] = useState(() =>
-    loadFromLS(LS_SECTORS, [])
-  )
-  const [customStockInfo, setCustomStockInfo] = useState(() =>
-    loadFromLS(LS_STOCKS, {})
-  )
+  const [customSectors,   setCustomSectors]   = useState(() => fromLS(LS_SECTORS, []))
+  const [customStockInfo, setCustomStockInfo] = useState(() => fromLS(LS_STOCKS,  {}))
+  const [builtinExtras,   setBuiltinExtras]   = useState(() => fromLS(LS_EXTRAS,  {}))
+  // builtinExtras: { ai: ['2330','0050'], memory: [...], ... }
 
-  // Persist to localStorage whenever changed
-  useEffect(() => {
-    localStorage.setItem(LS_SECTORS, JSON.stringify(customSectors))
-  }, [customSectors])
+  useEffect(() => { localStorage.setItem(LS_SECTORS, JSON.stringify(customSectors)) },  [customSectors])
+  useEffect(() => { localStorage.setItem(LS_STOCKS,  JSON.stringify(customStockInfo)) }, [customStockInfo])
+  useEffect(() => { localStorage.setItem(LS_EXTRAS,  JSON.stringify(builtinExtras)) },  [builtinExtras])
 
-  useEffect(() => {
-    localStorage.setItem(LS_STOCKS, JSON.stringify(customStockInfo))
-  }, [customStockInfo])
-
-  /** Add a new custom category */
+  /** 新增自訂分類 */
   function addSector(name, tag = '⭐') {
-    const id = `custom_${Date.now()}`
-    const color = SECTOR_COLORS[customSectors.length % SECTOR_COLORS.length]
-    setCustomSectors(prev => [...prev, { id, name, tag, color, stocks: [] }])
+    const id    = `custom_${Date.now()}`
+    const color = COLORS[customSectors.length % COLORS.length]
+    setCustomSectors(p => [...p, { id, name, tag, color, stocks: [] }])
     return id
   }
 
-  /** Rename a custom category */
-  function renameSector(id, name, tag) {
-    setCustomSectors(prev => prev.map(s =>
-      s.id === id ? { ...s, name, tag } : s
-    ))
-  }
-
-  /** Delete a custom category */
+  /** 刪除自訂分類 */
   function deleteSector(id) {
-    setCustomSectors(prev => prev.filter(s => s.id !== id))
+    setCustomSectors(p => p.filter(s => s.id !== id))
   }
 
-  /** Add a stock to a sector (built-in key or custom id) */
+  /** 加入股票到任一族群（原有或自訂） */
   function addStock(sectorId, stock) {
-    // Save stock info
-    setCustomStockInfo(prev => ({
-      ...prev,
-      [stock.code]: { code: stock.code, name: stock.name, base: stock.base || 100 },
+    // 1. 存股票資訊
+    setCustomStockInfo(p => ({
+      ...p,
+      [stock.code]: { code: stock.code, name: stock.name, base: stock.base || 100, otc: stock.otc || false },
     }))
-    // Add to sector
-    setCustomSectors(prev => prev.map(s =>
-      s.id === sectorId
-        ? { ...s, stocks: s.stocks.includes(stock.code) ? s.stocks : [...s.stocks, stock.code] }
-        : s
-    ))
+
+    // 2. 加到正確的族群
+    if (BUILTIN_KEYS.includes(sectorId)) {
+      // 原有族群 → 存到 builtinExtras
+      setBuiltinExtras(p => ({
+        ...p,
+        [sectorId]: [...new Set([...(p[sectorId] || []), stock.code])],
+      }))
+    } else {
+      // 自訂族群 → 存到 customSectors
+      setCustomSectors(p => p.map(s =>
+        s.id === sectorId
+          ? { ...s, stocks: [...new Set([...s.stocks, stock.code])] }
+          : s
+      ))
+    }
   }
 
-  /** Remove a stock from a sector */
+  /** 從族群移除股票 */
   function removeStock(sectorId, code) {
-    setCustomSectors(prev => prev.map(s =>
-      s.id === sectorId ? { ...s, stocks: s.stocks.filter(c => c !== code) } : s
-    ))
+    if (BUILTIN_KEYS.includes(sectorId)) {
+      setBuiltinExtras(p => ({
+        ...p,
+        [sectorId]: (p[sectorId] || []).filter(c => c !== code),
+      }))
+    } else {
+      setCustomSectors(p => p.map(s =>
+        s.id === sectorId ? { ...s, stocks: s.stocks.filter(c => c !== code) } : s
+      ))
+    }
   }
 
   return {
-    customSectors, customStockInfo,
-    addSector, renameSector, deleteSector,
-    addStock, removeStock,
+    customSectors, customStockInfo, builtinExtras,
+    addSector, deleteSector, addStock, removeStock,
   }
 }
