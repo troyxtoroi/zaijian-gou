@@ -213,6 +213,7 @@ export default function AnalysisTab({ stock, sectorKey, allSectors, analysis, bu
 
       {/* ── 修正2：市場情境面板放在分析結果下方 ── */}
       <MarketNewsPanel sectorKey={sectorKey} stockCode={stock.code} />
+
     </div>
   )
 }
