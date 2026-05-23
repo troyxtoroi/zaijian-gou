@@ -20,7 +20,6 @@ export default function MarketTab({ sector, setSector, allSectors, onAnalyze, lo
               fontWeight: sector === k ? 700 : 400, transition: 'all 0.15s',
             }}>
               {s.tag} {s.name}
-              {/* 自選股數量徽章 */}
               {s.stocks?.filter(st => st.isExtra).length > 0 && (
                 <span style={{
                   marginLeft: 4, background: s.color || '#818cf8',
@@ -30,7 +29,6 @@ export default function MarketTab({ sector, setSector, allSectors, onAnalyze, lo
                 </span>
               )}
             </button>
-            {/* 自訂族群刪除按鈕 */}
             {s.isCustom && (
               <button onClick={e => { e.stopPropagation(); onDeleteSector(s.sectorId) }} style={{
                 position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
@@ -51,7 +49,7 @@ export default function MarketTab({ sector, setSector, allSectors, onAnalyze, lo
         <div style={{ textAlign: 'center', color: '#475569', padding: '40px 0' }}>
           <div style={{ fontSize: 32, marginBottom: 10 }}>📋</div>
           <div>此分類尚無股票</div>
-          <div style={{ fontSize: 12, marginTop: 6 }}>點右上角「＋ 自選」加入</div>
+          <div style={{ fontSize: 12, marginTop: 6 }}>點右上角「＋ 自選」加入任意台股代號</div>
         </div>
       )}
 
@@ -62,9 +60,9 @@ export default function MarketTab({ sector, setSector, allSectors, onAnalyze, lo
             <div key={stock.code + idx} style={{
               background: '#151d35', border: '1px solid #1e2d4d', borderRadius: 10,
               padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#475569', fontSize: 12, minHeight: 140,
+              color: '#475569', fontSize: 12, minHeight: 160,
             }}>
-              ⏳ 載入中... {stock.name || stock.code}
+              ⏳ 載入 {stock.name || stock.code}
             </div>
           )
 
@@ -75,22 +73,27 @@ export default function MarketTab({ sector, setSector, allSectors, onAnalyze, lo
           const vol5 = cs.slice(-5).reduce((s, c) => s + c.volume, 0) / 5
           const volR = vol5 > 0 ? (last.volume / vol5).toFixed(1) : '—'
           const col  = sec.color || '#818cf8'
+
+          // 漲停/跌停
+          const isLimitUp   = chg >= 9.5
+          const isLimitDown = chg <= -9.5
           const isRemovable = stock.isExtra || sec.isCustom
 
           return (
             <div key={stock.code + idx} style={{
-              background: '#151d35', border: `1px solid ${stock.isExtra ? col + '44' : '#1e2d4d'}`,
-              borderRadius: 10, padding: 12, cursor: 'pointer', transition: 'border-color 0.15s', position: 'relative',
+              background: '#151d35',
+              border: `1px solid ${stock.isExtra ? col + '44' : '#1e2d4d'}`,
+              borderRadius: 10, padding: 12, cursor: 'pointer',
+              transition: 'border-color 0.15s', position: 'relative',
             }}
               onMouseOver={e => e.currentTarget.style.borderColor = col}
-              onMouseOut={e  => e.currentTarget.style.borderColor = stock.isExtra ? col + '44' : '#1e2d4d'}
+              onMouseOut={e  => e.currentTarget.style.borderColor = stock.isExtra ? col+'44' : '#1e2d4d'}
             >
-              {/* 自選標記 */}
+              {/* 自選標籤 */}
               {stock.isExtra && (
                 <span style={{
-                  position: 'absolute', top: 8, left: 8,
-                  fontSize: 9, color: col, background: col + '22',
-                  padding: '1px 5px', borderRadius: 8, border: `1px solid ${col}44`,
+                  position: 'absolute', top: 8, left: 8, fontSize: 9, color: col,
+                  background: col+'22', padding: '1px 5px', borderRadius: 8, border: `1px solid ${col}44`,
                 }}>自選</span>
               )}
 
@@ -104,7 +107,23 @@ export default function MarketTab({ sector, setSector, allSectors, onAnalyze, lo
 
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, marginTop: stock.isExtra ? 14 : 0 }}>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: '#e2e8f0' }}>{stock.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: '#e2e8f0' }}>{stock.name}</span>
+                    {/* 漲停標籤（台灣：漲=紅） */}
+                    {isLimitUp && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 900, padding: '1px 5px', borderRadius: 4,
+                        color: '#ef4444', border: '1.5px solid #ef4444', background: '#2b0f0f',
+                      }}>漲停</span>
+                    )}
+                    {/* 跌停標籤（台灣：跌=綠） */}
+                    {isLimitDown && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 900, padding: '1px 5px', borderRadius: 4,
+                        color: '#22c55e', border: '1.5px solid #22c55e', background: '#0f2b1e',
+                      }}>跌停</span>
+                    )}
+                  </div>
                   <div style={{ fontSize: 10, color: '#475569' }}>{stock.code}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
@@ -122,9 +141,9 @@ export default function MarketTab({ sector, setSector, allSectors, onAnalyze, lo
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#475569', marginBottom: 8 }}>
-                <span>量 {(last.volume / 1000).toFixed(0)}K</span>
+                <span>量 {(last.volume/1000).toFixed(0)}K</span>
                 <span style={{ color: parseFloat(volR) > 1.5 ? '#fbbf24' : '#475569' }}>
-                  {parseFloat(volR) > 1.5 ? `量增 ${volR}x` : `量比 ${volR}`}
+                  {parseFloat(volR) > 1.5 ? `量增${volR}x` : `量比${volR}`}
                 </span>
                 <span>高 {last.high >= 100 ? last.high.toFixed(1) : last.high.toFixed(2)}</span>
               </div>
@@ -132,7 +151,7 @@ export default function MarketTab({ sector, setSector, allSectors, onAnalyze, lo
               <button onClick={() => onAnalyze(stock, sector)} style={{
                 width: '100%', padding: '7px', fontSize: 12, borderRadius: 7,
                 cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700,
-                background: col + '18', border: `1px solid ${col}44`, color: col,
+                background: col+'18', border: `1px solid ${col}44`, color: col,
               }}>
                 🧠 分析
               </button>
