@@ -113,8 +113,8 @@ export default function RiskCalculator({ analysis, cash }) {
             {[
               { l: '建議買入張數', v: `${maxShares.toLocaleString('zh-TW')} 股（${maxShares/1000}張）`, c: '#818cf8', big: true },
               { l: '預估成本',     v: `NT$${Math.round(cost).toLocaleString('zh-TW')}`, c: '#e2e8f0' },
-              { l: '最大虧損',     v: `-NT$${Math.round(actualRisk).toLocaleString('zh-TW')}`, c: C.down },
-              { l: '目標獲利',     v: potentialGain > 0 ? `+NT$${Math.round(potentialGain).toLocaleString('zh-TW')}` : '—', c: C.up },
+              { l: '最大虧損',     v: `-NT$${Math.round(actualRisk).toLocaleString('zh-TW')}`, c: '#22c55e' },
+              { l: '目標獲利',     v: potentialGain > 0 ? `+NT$${Math.round(potentialGain).toLocaleString('zh-TW')}` : '—', c: '#ef4444' },
             ].map((x, i) => (
               <div key={i} style={{ background: '#151d35', border: BD, borderRadius: 8, padding: '10px 12px' }}>
                 <div style={{ fontSize: 10, color: '#475569', marginBottom: 3 }}>{x.l}</div>
