@@ -81,9 +81,9 @@ export default function OrderModal({ sig, cash, onBuy, onClose }) {
           <button onClick={() => ok && onBuy(sig, shares)} style={{
             flex: 2, padding: '9px', fontSize: 13, borderRadius: 8,
             fontFamily: 'inherit', fontWeight: 800,
-            background: ok ? '#0f2b1e' : '#151d35',
-            border: `1px solid ${ok ? '#22c55e' : '#1e2d4d'}`,
-            color: ok ? '#22c55e' : '#475569',
+            background: ok ? '#062020' : '#151d35',
+            border: `1px solid ${ok ? '#0abab5' : '#1e2d4d'}`,
+            color: ok ? '#0abab5' : '#475569',
             cursor: ok ? 'pointer' : 'not-allowed',
           }}>
             ✅ 確認買入
