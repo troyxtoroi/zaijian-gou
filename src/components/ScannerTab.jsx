@@ -49,7 +49,7 @@ export default function ScannerTab({ allSectors, onAnalyze }) {
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 10, lineHeight: 1.6,
           padding: '8px 12px', background: '#1e1b4b', borderRadius: 8, border: '1px solid #818cf833' }}>
-          🎯 掃描條件：<span style={{ color: C.buy }}>相對低點</span>（近20日底部30%）＋<span style={{ color: C.up }}>至少2根漲停潛力</span>（高波動+≥3項指標）＋<span style={{ color: '#818cf8' }}>多方K線型態</span><br/>
+          🎯 掃描條件：<span style={{ color: C.buy }}>相對低點</span>（近20日底部30%）＋<span style={{ color: C.up }}>至少1根漲停潛力（+10%）</span>（高波動+≥3項指標）＋<span style={{ color: '#818cf8' }}>多方K線型態</span><br/>
           <span style={{ fontSize: 10, color: '#475569' }}>此為最嚴格篩選，滿足全部條件的股票較少，但準確率更高</span>
         </div>
 
