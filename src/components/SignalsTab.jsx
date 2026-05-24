@@ -7,7 +7,7 @@ export default function SignalsTab({ signals, onOrder }) {
         <div style={{ fontSize: 40, marginBottom: 14 }}>🔔</div>
         <div style={{ fontSize: 14 }}>尚無交易信號</div>
         <div style={{ fontSize: 12, marginTop: 8, color: '#374151' }}>
-          信號條件：<strong style={{ color: '#e2e8f0' }}>相對低點</strong> ＋ <strong style={{ color: '#e2e8f0' }}>具備2根漲停潛力</strong><br/>
+          信號條件：<strong style={{ color: '#e2e8f0' }}>相對低點</strong> ＋ <strong style={{ color: '#e2e8f0' }}>具備1根漲停潛力</strong><br/>
           比一般信號更嚴格，確保在低點買入、高點獲利
         </div>
       </div>
@@ -23,7 +23,7 @@ export default function SignalsTab({ signals, onOrder }) {
         padding: '8px 12px', marginBottom: 12, borderRadius: 8, fontSize: 11,
         background: '#1e1b4b', border: '1px solid #818cf833', color: '#94a3b8',
       }}>
-        🎯 信號條件：<span style={{ color: C.buy }}>相對低點（近20日底部30%）</span> ＋ <span style={{ color: C.up }}>至少2根漲停潛力</span> ＋ <span style={{ color: '#818cf8' }}>多方K線型態</span>
+        🎯 信號條件：<span style={{ color: C.buy }}>相對低點（近20日底部30%）</span> ＋ <span style={{ color: C.up }}>至少1根漲停潛力（+10%）</span> ＋ <span style={{ color: '#818cf8' }}>多方K線型態</span>
       </div>
 
       {signals.map(sig => {
@@ -104,8 +104,8 @@ export default function SignalsTab({ signals, onOrder }) {
                   <span style={{ color: (la.limitUpInfo.atrPct > 0.05 ? C.up : '#94a3b8'), fontWeight: 700 }}>
                     {((la.limitUpInfo.atrPct || 0) * 100).toFixed(1)}%
                   </span>
-                  {la.limitUpInfo.can2LimitUp && (
-                    <span style={{ marginLeft: 8, color: C.up, fontWeight: 700 }}>🔥 符合2根漲停條件</span>
+                  {la.limitUpInfo.can1LimitUp && (
+                    <span style={{ marginLeft: 8, color: C.up, fontWeight: 700 }}>🔥 符合1根漲停條件</span>
                   )}
                 </div>
               </div>
