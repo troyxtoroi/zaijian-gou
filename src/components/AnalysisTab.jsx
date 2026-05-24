@@ -5,6 +5,7 @@ import IndicatorChart, { calcKD, calcMACD } from './IndicatorChart.jsx'
 import MarketNewsPanel from './MarketNewsPanel.jsx'
 import RiskCalculator  from './RiskCalculator.jsx'
 import { AlertPanel }  from './PriceAlert.jsx'
+import InstitutionalPanel from './InstitutionalPanel.jsx'
 import { C, priceColor, sigColor, sigBg, sigBorder, sentColor } from '../utils/colors.js'
 
 export default function AnalysisTab({ stock, sectorKey, allSectors, analysis, busy, onReanalyze,
@@ -258,6 +259,9 @@ export default function AnalysisTab({ stock, sectorKey, allSectors, analysis, bu
 
       {/* 股價警報 */}
       <AlertPanel stock={stock} analysis={analysis} alerts={alerts} addAlert={addAlert} removeAlert={removeAlert} />
+
+      {/* 三大法人 + 籌碼 */}
+      <InstitutionalPanel stock={stock} />
     </div>
   )
 }
