@@ -118,7 +118,7 @@ export default function ScannerTab({ allSectors, onAnalyze }) {
           {filtered.map(({ stock, sKey, result, price, chg }, idx) => {
             const up     = chg >= 0
             const sig    = result.signal
-            const sigCol = sig === '買入' ? '#22c55e' : sig === '賣出' ? '#ef4444' : '#64748b'
+            const sigCol = sig === '買入' ? '#0abab5' : sig === '賣出' ? '#f59e0b' : '#64748b'
             const conf   = result.confidence
             const secCol = allSectors[sKey]?.color || '#818cf8'
 
@@ -147,7 +147,7 @@ export default function ScannerTab({ allSectors, onAnalyze }) {
                   <div style={{ fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#e2e8f0' }}>
                     {fmtPrice(price)}
                   </div>
-                  <div style={{ fontSize: 10, color: up ? '#22c55e' : '#ef4444' }}>
+                  <div style={{ fontSize: 10, color: up ? '#ef4444' : '#22c55e' }}>
                     {up ? '▲' : '▼'}{Math.abs(chg).toFixed(2)}%
                   </div>
                 </div>
