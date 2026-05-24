@@ -126,8 +126,8 @@ export default function SignalsTab({ signals, onOrder }) {
             {/* 進場/停損/目標 */}
             <div style={{ display: 'flex', gap: 12, fontSize: 11, marginBottom: 12 }}>
               <span style={{ color: '#818cf8' }}>進場 {fmtP(la.entry)}</span>
-              <span style={{ color: C.down }}>停損 {fmtP(la.stopLoss)}</span>
-              <span style={{ color: C.up }}>目標 {fmtP(la.target)}</span>
+              <span style={{ color: '#22c55e' }}>停損 {fmtP(la.stopLoss)}</span>
+              <span style={{ color: '#ef4444' }}>目標 {fmtP(la.target)}</span>
               {rrRatio > 0 && (
                 <span style={{ color: rrRatio >= 2 ? C.buy : '#f59e0b', fontWeight: 700 }}>
                   RR 1:{rrRatio.toFixed(1)}{rrRatio >= 2 ? ' ✅' : ''}
