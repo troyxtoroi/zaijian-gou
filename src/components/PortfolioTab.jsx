@@ -56,12 +56,12 @@ export default function PortfolioTab({ holdings, cash, onSell }) {
               <div style={{ textAlign: 'right' }}>
                 <div style={{
                   fontSize: 15, fontWeight: 900,
-                  color: h.pnl >= 0 ? '#22c55e' : '#ef4444',
+                  color: h.pnl >= 0 ? '#ef4444' : '#22c55e',
                   fontVariantNumeric: 'tabular-nums',
                 }}>
                   {h.pnl >= 0 ? '+' : ''}{Math.round(h.pnl).toLocaleString('zh-TW')} 元
                 </div>
-                <div style={{ fontSize: 11, color: h.pct >= 0 ? '#22c55e' : '#ef4444' }}>
+                <div style={{ fontSize: 11, color: h.pct >= 0 ? '#ef4444' : '#22c55e' }}>
                   {h.pct >= 0 ? '+' : ''}{h.pct.toFixed(2)}%
                 </div>
               </div>
