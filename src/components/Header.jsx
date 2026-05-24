@@ -31,7 +31,7 @@ export default function Header({ totalValue }) {
         <div style={{ fontSize: 10, color: '#475569' }}>總資產</div>
         <div style={{
           fontSize: 18, fontWeight: 900,
-          color: up ? '#22c55e' : '#ef4444',
+          color: up ? '#ef4444' : '#22c55e',
           fontVariantNumeric: 'tabular-nums',
         }}>
           NT$ {Math.round(totalValue).toLocaleString('zh-TW')}
