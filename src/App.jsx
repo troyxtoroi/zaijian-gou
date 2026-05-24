@@ -19,6 +19,7 @@ import ScannerTab    from './components/ScannerTab.jsx'
 import OrderModal    from './components/OrderModal.jsx'
 import ApiKeyModal   from './components/ApiKeyModal.jsx'
 import AddStockModal from './components/AddStockModal.jsx'
+import { usePriceAlerts } from './components/PriceAlert.jsx'
 
 const LS_KEY = 'zaijian_api_key'
 initCandleCache(SECTORS)
@@ -303,7 +304,9 @@ export default function App() {
         {tab === 'analysis' && (
           <AnalysisTab stock={selStock} sectorKey={selSector} allSectors={allSectors}
             analysis={selStock ? analyses[selStock.code] : null}
-            busy={busy} onReanalyze={(s, sk) => doAnalyze(s, sk, true)} />
+            busy={busy} onReanalyze={(s, sk) => doAnalyze(s, sk, true)}
+            alerts={alerts} addAlert={addAlert} removeAlert={removeAlert}
+            cash={cash} />
         )}
         {tab === 'scanner' && (
           <ScannerTab allSectors={allSectors} onAnalyze={(s, sk) => doAnalyze(s, sk, true)} />
