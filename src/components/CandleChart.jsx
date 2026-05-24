@@ -139,3 +139,41 @@ export default function CandleChart({ candles, h = 160, mini = false, showMA = f
     </svg>
   )
 }
+
+/** 偵測支撐/壓力位（供外部使用） */
+export function detectSupportResistance(candles, count = 3) {
+  if (!candles || candles.length < 10) return { supports: [], resistances: [] }
+  const supports    = []
+  const resistances = []
+  const n = candles.length
+
+  for (let i = 2; i < n - 2; i++) {
+    const c = candles[i]
+    // 局部低點（支撐）
+    if (c.low < candles[i-1].low && c.low < candles[i-2].low &&
+        c.low < candles[i+1].low && c.low < candles[i+2].low) {
+      supports.push(+c.low.toFixed(2))
+    }
+    // 局部高點（壓力）
+    if (c.high > candles[i-1].high && c.high > candles[i-2].high &&
+        c.high > candles[i+1].high && c.high > candles[i+2].high) {
+      resistances.push(+c.high.toFixed(2))
+    }
+  }
+
+  // 聚類（合併相近5%的位置）
+  function cluster(arr) {
+    if (!arr.length) return []
+    arr.sort((a, b) => a - b)
+    const clusters = []
+    let group = [arr[0]]
+    for (let i = 1; i < arr.length; i++) {
+      if ((arr[i] - group[0]) / group[0] < 0.05) { group.push(arr[i]) }
+      else { clusters.push(group.reduce((s,v) => s+v,0)/group.length); group = [arr[i]] }
+    }
+    clusters.push(group.reduce((s,v)=>s+v,0)/group.length)
+    return clusters.slice(-count).map(v => +v.toFixed(2))
+  }
+
+  return { supports: cluster(supports), resistances: cluster(resistances) }
+}
