@@ -78,7 +78,7 @@ export default function CandleChart({ candles, h = 160, mini = false, showMA = f
       {/* Candles */}
       {candles.map((c, i) => {
         const up   = c.close >= c.open
-        const col  = up ? '#22c55e' : '#ef4444'
+        const col  = up ? '#ef4444' : '#22c55e'
         const bt   = toY(Math.max(c.open, c.close))
         const bb   = toY(Math.min(c.open, c.close))
         return (
@@ -121,7 +121,7 @@ export default function CandleChart({ candles, h = 160, mini = false, showMA = f
           <rect key={i}
             x={cx(i) - bw / 2} y={volTop + (volH - 4 - bh)}
             width={bw} height={Math.max(1, bh)}
-            fill={up ? '#22c55e' : '#ef4444'} fillOpacity={0.5} />
+            fill={up ? '#ef4444' : '#22c55e'} fillOpacity={0.5} />
         )
       })}
 
