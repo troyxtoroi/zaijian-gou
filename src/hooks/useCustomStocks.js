@@ -1,154 +1,183 @@
-import { useState, useEffect, useRef } from 'react'
+/**
+ * useCustomStocks — 自選股持久化 Hook
+ * 
+ * 核心保護原則：
+ * 1. 絕不用空資料覆蓋有資料的 localStorage
+ * 2. 初始化完成前不寫入
+ * 3. 三層備份（主鍵 + 備份 + 緊急備份）
+ * 4. 每次操作前驗證
+ */
+import { useState, useEffect, useRef, useCallback } from 'react'
 
-const LS_SECTORS  = 'zaijian_custom_sectors'
-const LS_STOCKS   = 'zaijian_custom_stocks'
-const LS_EXTRAS   = 'zaijian_builtin_extras'
-// 備份鍵（雙重保護）
-const LS_BACKUP   = 'zaijian_backup'
+const LS = {
+  SECTORS:  'zaijian_custom_sectors',
+  STOCKS:   'zaijian_custom_stocks',
+  EXTRAS:   'zaijian_builtin_extras',
+  BACKUP:   'zaijian_backup_v2',      // 最新備份
+  EMERG:    'zaijian_emergency_v2',   // 緊急備份（每10分鐘更新）
+}
 
-const COLORS = ['#f472b6','#a78bfa','#34d399','#fbbf24','#60a5fa','#f87171','#2dd4bf','#fb923c']
 const BUILTIN_KEYS = ['ai','memory','satellite','passive','thermal','packaging']
+const COLORS = ['#f472b6','#a78bfa','#34d399','#fbbf24','#60a5fa','#f87171','#2dd4bf','#fb923c']
 
+// ── 安全讀取 ────────────────────────────────────────────
 function safeRead(key, fallback) {
   try {
     const raw = localStorage.getItem(key)
-    if (!raw || raw === 'null' || raw === 'undefined') return fallback
+    if (!raw || raw === 'null' || raw === 'undefined') return null
     const parsed = JSON.parse(raw)
-    // 基本型態驗證
-    if (Array.isArray(fallback) && !Array.isArray(parsed)) return fallback
-    if (!Array.isArray(fallback) && typeof parsed !== 'object') return fallback
-    return parsed ?? fallback
-  } catch { return fallback }
-}
-
-function safeWrite(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)) } catch {}
-}
-
-/** 從備份恢復 */
-function tryRestoreFromBackup() {
-  try {
-    const raw = localStorage.getItem(LS_BACKUP)
-    if (!raw) return null
-    return JSON.parse(raw)
+    if (parsed === null || parsed === undefined) return null
+    return parsed
   } catch { return null }
 }
 
-/** 保存備份 */
-function saveBackup(sectors, stockInfo, extras) {
+// ── 安全寫入（防止空資料覆蓋）──────────────────────────
+function safeWrite(key, value) {
   try {
-    localStorage.setItem(LS_BACKUP, JSON.stringify({ sectors, stockInfo, extras, ts: Date.now() }))
+    const newStr = JSON.stringify(value)
+    const isEmpty = v => !v || v === '[]' || v === '{}' || v === 'null'
+
+    // 保護：不用空資料覆蓋有資料的舊值
+    if (isEmpty(newStr)) {
+      const oldRaw = localStorage.getItem(key)
+      if (oldRaw && !isEmpty(oldRaw)) {
+        console.warn(`[ZG] 阻止空資料覆蓋 ${key}，保留原有資料`)
+        return false
+      }
+    }
+    localStorage.setItem(key, newStr)
+    return true
+  } catch (e) {
+    console.error('[ZG] 寫入失敗:', key, e)
+    return false
+  }
+}
+
+// ── 從任何來源讀取初始資料 ──────────────────────────────
+function loadInitial() {
+  // 嘗試主鍵
+  const sectors   = safeRead(LS.SECTORS, null)
+  const stockInfo = safeRead(LS.STOCKS,  null)
+  const extras    = safeRead(LS.EXTRAS,  null)
+
+  const hasMain = (Array.isArray(sectors) && sectors.length > 0) ||
+                  (stockInfo && Object.keys(stockInfo).length > 0) ||
+                  (extras && Object.values(extras).flat().length > 0)
+
+  if (hasMain) {
+    console.log('[ZG] 從主鍵載入:', {
+      sectors: sectors?.length ?? 0,
+      stocks:  Object.keys(stockInfo || {}).length,
+      extras:  Object.values(extras || {}).flat().length,
+    })
+    return { sectors: sectors || [], stockInfo: stockInfo || {}, extras: extras || {} }
+  }
+
+  // 嘗試備份
+  for (const bKey of [LS.BACKUP, LS.EMERG]) {
+    const backup = safeRead(bKey, null)
+    if (!backup) continue
+    const bSectors   = backup.sectors   || backup.customSectors   || []
+    const bStockInfo = backup.stockInfo || backup.customStockInfo || {}
+    const bExtras    = backup.extras    || backup.builtinExtras   || {}
+    const hasData    = bSectors.length > 0 || Object.keys(bStockInfo).length > 0
+    if (hasData) {
+      console.log(`[ZG] 從備份 ${bKey} 還原:`, {
+        sectors: bSectors.length, stocks: Object.keys(bStockInfo).length,
+      })
+      return { sectors: bSectors, stockInfo: bStockInfo, extras: bExtras }
+    }
+  }
+
+  // 沒有任何資料 → 空白開始
+  return { sectors: [], stockInfo: {}, extras: {} }
+}
+
+// ── 保存所有資料（含備份）───────────────────────────────
+function persistAll(sectors, stockInfo, extras) {
+  safeWrite(LS.SECTORS, sectors)
+  safeWrite(LS.STOCKS,  stockInfo)
+  safeWrite(LS.EXTRAS,  extras)
+
+  // 備份
+  const backup = { sectors, stockInfo, extras, ts: Date.now() }
+  try { localStorage.setItem(LS.BACKUP, JSON.stringify(backup)) } catch {}
+}
+
+function persistEmergency(sectors, stockInfo, extras) {
+  try {
+    localStorage.setItem(LS.EMERG, JSON.stringify({
+      sectors, stockInfo, extras, ts: Date.now(),
+    }))
   } catch {}
 }
 
+// ═══════════════════════════════════════════════════════
 export function useCustomStocks() {
-  const initRef = useRef(false)
+  // 初始化（只跑一次）
+  const initial = useRef(loadInitial())
 
-  // 初始化：先讀主鍵，若空則嘗試備份
-  const [customSectors, setCustomSectors] = useState(() => {
-    let data = safeRead(LS_SECTORS, null)
-    if (!data || !Array.isArray(data) || data.length === 0) {
-      const backup = tryRestoreFromBackup()
-      if (backup?.sectors?.length > 0) {
-        console.log('[ZG] 從備份還原 customSectors:', backup.sectors.length, '筆')
-        return backup.sectors
+  const [customSectors,   setCustomSectors]   = useState(initial.current.sectors)
+  const [customStockInfo, setCustomStockInfo] = useState(initial.current.stockInfo)
+  const [builtinExtras,   setBuiltinExtras]   = useState(initial.current.extras)
+
+  // 初始化保護標記：初始化完成後才允許寫入
+  const readyRef    = useRef(false)
+  const saveTimer   = useRef(null)
+
+  // 初始化完成後才開始寫入
+  useEffect(() => {
+    const t = setTimeout(() => { readyRef.current = true }, 200)
+    return () => clearTimeout(t)
+  }, [])
+
+  // 定期緊急備份（每10分鐘）
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (readyRef.current) {
+        persistEmergency(customSectors, customStockInfo, builtinExtras)
       }
-    }
-    return data || []
-  })
+    }, 10 * 60 * 1000)
+    return () => clearInterval(t)
+  }, [customSectors, customStockInfo, builtinExtras])
 
-  const [customStockInfo, setCustomStockInfo] = useState(() => {
-    let data = safeRead(LS_STOCKS, null)
-    if (!data || Object.keys(data).length === 0) {
-      const backup = tryRestoreFromBackup()
-      if (backup?.stockInfo && Object.keys(backup.stockInfo).length > 0) {
-        console.log('[ZG] 從備份還原 stockInfo:', Object.keys(backup.stockInfo).length, '筆')
-        return backup.stockInfo
-      }
-    }
-    return data || {}
-  })
-
-  const [builtinExtras, setBuiltinExtras] = useState(() => {
-    let data = safeRead(LS_EXTRAS, null)
-    if (!data || Object.keys(data).length === 0) {
-      const backup = tryRestoreFromBackup()
-      if (backup?.extras && Object.keys(backup.extras).length > 0) {
-        console.log('[ZG] 從備份還原 builtinExtras:', JSON.stringify(backup.extras))
-        return backup.extras
-      }
-    }
-    return data || {}
-  })
-
-  // 儲存到 localStorage（每次有變更就存，且寫備份）
-  const saveTimer = useRef(null)
-  const pendingSave = useRef({ sectors: null, stockInfo: null, extras: null })
-
-  function debouncedSave() {
+  // 防抖寫入（狀態改變時）
+  const scheduleSave = useCallback((sectors, stockInfo, extras) => {
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
-      const s = pendingSave.current
-      if (s.sectors !== null)   safeWrite(LS_SECTORS, s.sectors)
-      if (s.stockInfo !== null) safeWrite(LS_STOCKS,  s.stockInfo)
-      if (s.extras !== null)    safeWrite(LS_EXTRAS,  s.extras)
-      // 備份（不管哪個有更新都存完整備份）
-      saveBackup(
-        s.sectors  ?? safeRead(LS_SECTORS, []),
-        s.stockInfo ?? safeRead(LS_STOCKS, {}),
-        s.extras   ?? safeRead(LS_EXTRAS, {})
-      )
-    }, 300)
-  }
+      if (!readyRef.current) return  // 初始化未完成，不寫入
+      persistAll(sectors, stockInfo, extras)
+    }, 500)
+  }, [])
 
   useEffect(() => {
-    if (!initRef.current) { initRef.current = true; return }
-    pendingSave.current.sectors = customSectors
-    debouncedSave()
-  }, [customSectors])
+    if (!readyRef.current) return
+    scheduleSave(customSectors, customStockInfo, builtinExtras)
+  }, [customSectors, customStockInfo, builtinExtras])
 
-  useEffect(() => {
-    if (!initRef.current) return
-    pendingSave.current.stockInfo = customStockInfo
-    debouncedSave()
-  }, [customStockInfo])
+  // ── 操作函式 ──────────────────────────────────────────
 
-  useEffect(() => {
-    if (!initRef.current) return
-    pendingSave.current.extras = builtinExtras
-    debouncedSave()
-  }, [builtinExtras])
-
-  /** 新增自訂分類 */
   function addSector(name, tag = '⭐') {
     const id    = `custom_${Date.now()}`
     const color = COLORS[customSectors.length % COLORS.length]
-    const newSector = { id, name, tag, color, stocks: [] }
-    setCustomSectors(p => [...p, newSector])
+    setCustomSectors(p => [...p, { id, name, tag, color, stocks: [] }])
     return id
   }
 
-  /** 刪除自訂分類 */
   function deleteSector(id) {
     setCustomSectors(p => p.filter(s => s.id !== id))
   }
 
-  /** 加入股票到任一族群（原有或自訂） */
   function addStock(sectorId, stock) {
-    const stockData = {
+    const info = {
       code: stock.code,
       name: stock.name || stock.code,
       base: stock.base || 100,
       otc:  stock.otc  || false,
     }
 
-    // 儲存股票資訊
-    setCustomStockInfo(p => ({
-      ...p,
-      [stock.code]: stockData,
-    }))
+    setCustomStockInfo(p => ({ ...p, [stock.code]: info }))
 
-    // 加到正確族群
     if (BUILTIN_KEYS.includes(sectorId)) {
       setBuiltinExtras(p => ({
         ...p,
@@ -163,7 +192,6 @@ export function useCustomStocks() {
     }
   }
 
-  /** 從族群移除股票 */
   function removeStock(sectorId, code) {
     if (BUILTIN_KEYS.includes(sectorId)) {
       setBuiltinExtras(p => ({
@@ -177,25 +205,9 @@ export function useCustomStocks() {
     }
   }
 
-  /** 診斷：列出所有已存股票 */
-  function diagnose() {
-    const result = {
-      customSectors,
-      customStockInfo,
-      builtinExtras,
-      lsSectors:   safeRead(LS_SECTORS, []),
-      lsStocks:    safeRead(LS_STOCKS,  {}),
-      lsExtras:    safeRead(LS_EXTRAS,  {}),
-      backup:      tryRestoreFromBackup(),
-    }
-    console.log('[ZG] 診斷資料:', result)
-    return result
-  }
-
-  /** 匯出所有自選股資料（JSON字串） */
   function exportData() {
     return JSON.stringify({
-      version: 2,
+      version: 3,
       exportedAt: new Date().toISOString(),
       customSectors,
       customStockInfo,
@@ -203,29 +215,39 @@ export function useCustomStocks() {
     }, null, 2)
   }
 
-  /** 匯入自選股資料 */
   function importData(jsonStr) {
     try {
       const data = JSON.parse(jsonStr)
-      if (data.customSectors)   setCustomSectors(data.customSectors)
-      if (data.customStockInfo) setCustomStockInfo(data.customStockInfo)
-      if (data.builtinExtras)   setBuiltinExtras(data.builtinExtras)
-      return { ok: true, msg: `匯入成功：${Object.keys(data.customStockInfo||{}).length} 檔自選股` }
+      // 相容各種格式
+      const sectors   = data.customSectors   || data.sectors   || []
+      const stockInfo = data.customStockInfo || data.stockInfo || {}
+      const extras    = data.builtinExtras   || data.extras    || {}
+      if (sectors.length || Object.keys(stockInfo).length) {
+        setCustomSectors(sectors)
+        setCustomStockInfo(stockInfo)
+        setBuiltinExtras(extras)
+        // 立即強制寫入
+        setTimeout(() => persistAll(sectors, stockInfo, extras), 100)
+        return { ok: true, msg: `✅ 匯入成功：${Object.keys(stockInfo).length} 檔股票` }
+      }
+      return { ok: false, msg: '資料中沒有自選股' }
     } catch (e) {
-      return { ok: false, msg: '匯入失敗：' + e.message }
+      return { ok: false, msg: '格式錯誤：' + e.message }
+    }
+  }
+
+  function diagnose() {
+    return {
+      memory: { sectors: customSectors.length, stocks: Object.keys(customStockInfo).length, extras: Object.values(builtinExtras).flat().length },
+      ls:     { sectors: safeRead(LS.SECTORS,[])?.length, stocks: Object.keys(safeRead(LS.STOCKS,{})).length },
+      backup: safeRead(LS.BACKUP, null),
+      emerg:  safeRead(LS.EMERG,  null),
     }
   }
 
   return {
-    customSectors,
-    customStockInfo,
-    builtinExtras,
-    addSector,
-    deleteSector,
-    addStock,
-    removeStock,
-    diagnose,
-    exportData,
-    importData,
+    customSectors, customStockInfo, builtinExtras,
+    addSector, deleteSector, addStock, removeStock,
+    exportData, importData, diagnose,
   }
 }
