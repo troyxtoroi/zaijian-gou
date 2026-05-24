@@ -255,57 +255,40 @@ export default function App() {
     }}>
       <Toast toast={toast} />
 
-      {/* 右上角控制列 */}
-      <div style={{
-        position: 'absolute', top: 14, right: 14, zIndex: 50,
-        display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end',
-      }}>
-        <div style={{ display: 'flex', background: '#0f1628', border: '1px solid #1e2d4d', borderRadius: 6, overflow: 'hidden' }}>
-          {[
-            { k: 'local',  label: '📐 免費分析' },
-            { k: 'claude', label: '🤖 Claude AI' },
-          ].map(m => (
+      <Header totalValue={totalValue} controls={<>
+        <div style={{ display:'flex', background:'#0f1628', border:'1px solid #1e2d4d', borderRadius:6, overflow:'hidden' }}>
+          {[{k:'local',label:'📐 免費'},{k:'claude',label:'🤖 AI'}].map(m => (
             <button key={m.k} onClick={() => setAnalyzeMode(m.k)} style={{
-              padding: '5px 11px', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit',
-              background: analyzeMode === m.k ? '#1e2d4d' : 'transparent',
-              border: 'none', color: analyzeMode === m.k ? '#818cf8' : '#475569',
-              fontWeight: analyzeMode === m.k ? 700 : 400,
+              padding:'4px 8px', fontSize:10, cursor:'pointer', fontFamily:'inherit',
+              background: analyzeMode===m.k ? '#1e2d4d' : 'transparent',
+              border:'none', color: analyzeMode===m.k ? '#818cf8' : '#475569',
+              fontWeight: analyzeMode===m.k ? 700 : 400,
             }}>{m.label}</button>
           ))}
         </div>
-
-        <button onClick={() => {
-          setLoadedSectors(p => { const n = {...p}; delete n[sector]; return n })
-          pop('🔄 刷新中...', 'ok')
-        }} style={{
-          padding: '5px 9px', fontSize: 13, borderRadius: 6, cursor: 'pointer',
-          background: '#151d35', border: '1px solid #1e2d4d', color: '#64748b', fontFamily: 'inherit',
+        <button onClick={() => { setLoadedSectors(p => { const n={...p}; delete n[sector]; return n }); pop('🔄 刷新中...','ok') }} style={{
+          padding:'4px 8px', fontSize:12, borderRadius:6, cursor:'pointer',
+          background:'#151d35', border:'1px solid #1e2d4d', color:'#64748b', fontFamily:'inherit',
         }}>⟳</button>
-
         <button onClick={() => setShowQuickAdd(true)} style={{
-          padding: '5px 11px', fontSize: 11, borderRadius: 6, cursor: 'pointer',
-          background: '#1e2d4d', border: '1px solid #818cf855', color: '#818cf8', fontFamily: 'inherit',
-        }}>⚡ 快速加股</button>
-
+          padding:'4px 9px', fontSize:10, borderRadius:6, cursor:'pointer',
+          background:'#1e2d4d', border:'1px solid #818cf855', color:'#818cf8', fontFamily:'inherit',
+        }}>⚡ 加股</button>
         <button onClick={() => setShowDataMgr(true)} style={{
-          padding: '5px 9px', fontSize: 11, borderRadius: 6, cursor: 'pointer',
-          background: '#151d35', border: '1px solid #1e2d4d', color: '#64748b', fontFamily: 'inherit',
+          padding:'4px 8px', fontSize:10, borderRadius:6, cursor:'pointer',
+          background:'#151d35', border:'1px solid #1e2d4d', color:'#64748b', fontFamily:'inherit',
         }}>📋</button>
-
         <button onClick={() => setShowAdd(true)} style={{
-          padding: '5px 11px', fontSize: 11, borderRadius: 6, cursor: 'pointer',
-          background: '#1e3a2f', border: '1px solid #22c55e44', color: '#22c55e', fontFamily: 'inherit',
+          padding:'4px 9px', fontSize:10, borderRadius:6, cursor:'pointer',
+          background:'#1e3a2f', border:'1px solid #22c55e44', color:'#22c55e', fontFamily:'inherit',
         }}>＋ 自選</button>
-
         <button onClick={() => setShowKey(true)} style={{
-          padding: '5px 11px', fontSize: 11, borderRadius: 6, cursor: 'pointer',
+          padding:'4px 9px', fontSize:10, borderRadius:6, cursor:'pointer',
           background: apiKey ? '#0f2b1e' : '#151d35',
           border: `1px solid ${apiKey ? '#22c55e44' : '#1e2d4d'}`,
-          color: apiKey ? '#22c55e' : '#64748b', fontFamily: 'inherit',
-        }}>{apiKey ? '🔑 API✓' : '🔑 API'}</button>
-      </div>
-
-      <Header totalValue={totalValue} />
+          color: apiKey ? '#22c55e' : '#64748b', fontFamily:'inherit',
+        }}>{apiKey ? '🔑✓' : '🔑 API'}</button>
+      </>} />
       <NavTabs tab={tab} setTab={setTab} pendingCount={pendingCnt} holdingCount={holdings.length} />
 
       <div style={{ padding: '14px 16px', overflowY: 'auto', maxHeight: 'calc(100vh - 140px)' }}>
