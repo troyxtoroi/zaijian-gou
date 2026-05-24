@@ -1,5 +1,6 @@
 import { CANDLES_CACHE } from '../services/stockApi.js'
 import CandleChart from './CandleChart.jsx'
+import { C, priceColor } from '../utils/colors.js'
 
 export default function MarketTab({ sector, setSector, allSectors, onAnalyze, loading, onDeleteSector, onRemoveStock }) {
   const sec = allSectors[sector]
@@ -21,10 +22,7 @@ export default function MarketTab({ sector, setSector, allSectors, onAnalyze, lo
             }}>
               {s.tag} {s.name}
               {s.stocks?.filter(st => st.isExtra).length > 0 && (
-                <span style={{
-                  marginLeft: 4, background: s.color || '#818cf8',
-                  color: '#fff', fontSize: 9, padding: '0px 4px', borderRadius: 8, fontWeight: 700,
-                }}>
+                <span style={{ marginLeft: 4, background: s.color || '#818cf8', color: '#fff', fontSize: 9, padding: '0px 4px', borderRadius: 8, fontWeight: 700 }}>
                   +{s.stocks.filter(st => st.isExtra).length}
                 </span>
               )}
@@ -41,7 +39,7 @@ export default function MarketTab({ sector, setSector, allSectors, onAnalyze, lo
 
       {loading && (
         <div style={{ textAlign: 'center', color: '#818cf8', padding: '10px 0', fontSize: 12, marginBottom: 10 }}>
-          📡 載入 Yahoo Finance 真實股價中...
+          📡 載入 Yahoo Finance 真實股價...
         </div>
       )}
 
@@ -61,76 +59,51 @@ export default function MarketTab({ sector, setSector, allSectors, onAnalyze, lo
               background: '#151d35', border: '1px solid #1e2d4d', borderRadius: 10,
               padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: '#475569', fontSize: 12, minHeight: 160,
-            }}>
-              ⏳ 載入 {stock.name || stock.code}
-            </div>
+            }}>⏳ 載入 {stock.name || stock.code}</div>
           )
 
-          const last = cs[cs.length - 1]
-          const prev = cs[cs.length - 2]
+          const last = cs[cs.length - 1], prev = cs[cs.length - 2]
           const chg  = (last.close - prev.close) / prev.close * 100
-          const up   = chg >= 0
-          const vol5 = cs.slice(-5).reduce((s, c) => s + c.volume, 0) / 5
-          const volR = vol5 > 0 ? (last.volume / vol5).toFixed(1) : '—'
           const col  = sec.color || '#818cf8'
-
-          // 漲停/跌停
+          const up   = chg >= 0
+          const vol5 = cs.slice(-5).reduce((s, c) => s + c.volume, 0) / 5 || 1
+          const volR = (last.volume / vol5).toFixed(1)
           const isLimitUp   = chg >= 9.5
           const isLimitDown = chg <= -9.5
           const isRemovable = stock.isExtra || sec.isCustom
 
+          const fmtP = p => p >= 1000 ? p.toFixed(0) : p >= 100 ? p.toFixed(1) : p.toFixed(2)
+
           return (
             <div key={stock.code + idx} style={{
-              background: '#151d35',
-              border: `1px solid ${stock.isExtra ? col + '44' : '#1e2d4d'}`,
-              borderRadius: 10, padding: 12, cursor: 'pointer',
-              transition: 'border-color 0.15s', position: 'relative',
+              background: '#151d35', border: `1px solid ${stock.isExtra ? col + '44' : '#1e2d4d'}`,
+              borderRadius: 10, padding: 12, cursor: 'pointer', transition: 'border-color 0.15s', position: 'relative',
             }}
               onMouseOver={e => e.currentTarget.style.borderColor = col}
-              onMouseOut={e  => e.currentTarget.style.borderColor = stock.isExtra ? col+'44' : '#1e2d4d'}
+              onMouseOut={e  => e.currentTarget.style.borderColor = stock.isExtra ? col + '44' : '#1e2d4d'}
             >
-              {/* 自選標籤 */}
               {stock.isExtra && (
-                <span style={{
-                  position: 'absolute', top: 8, left: 8, fontSize: 9, color: col,
-                  background: col+'22', padding: '1px 5px', borderRadius: 8, border: `1px solid ${col}44`,
-                }}>自選</span>
+                <span style={{ position: 'absolute', top: 8, left: 8, fontSize: 9, color: col, background: col + '22', padding: '1px 5px', borderRadius: 8, border: `1px solid ${col}44` }}>自選</span>
               )}
-
-              {/* 移除按鈕 */}
               {isRemovable && (
-                <button onClick={e => { e.stopPropagation(); onRemoveStock(sector, stock.code) }} style={{
-                  position: 'absolute', top: 6, right: 6,
-                  background: 'none', border: 'none', cursor: 'pointer', color: '#475569', fontSize: 14, padding: 2,
-                }}>✕</button>
+                <button onClick={e => { e.stopPropagation(); onRemoveStock(sector, stock.code) }} style={{ position: 'absolute', top: 6, right: 6, background: 'none', border: 'none', cursor: 'pointer', color: '#475569', fontSize: 14, padding: 2 }}>✕</button>
               )}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, marginTop: stock.isExtra ? 14 : 0 }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                     <span style={{ fontSize: 14, fontWeight: 800, color: '#e2e8f0' }}>{stock.name}</span>
-                    {/* 漲停標籤（台灣：漲=紅） */}
-                    {isLimitUp && (
-                      <span style={{
-                        fontSize: 10, fontWeight: 900, padding: '1px 5px', borderRadius: 4,
-                        color: '#ef4444', border: '1.5px solid #ef4444', background: '#2b0f0f',
-                      }}>漲停</span>
-                    )}
-                    {/* 跌停標籤（台灣：跌=綠） */}
-                    {isLimitDown && (
-                      <span style={{
-                        fontSize: 10, fontWeight: 900, padding: '1px 5px', borderRadius: 4,
-                        color: '#22c55e', border: '1.5px solid #22c55e', background: '#0f2b1e',
-                      }}>跌停</span>
-                    )}
+                    {/* 漲停（紅色框） */}
+                    {isLimitUp && <span style={{ fontSize: 10, fontWeight: 900, padding: '1px 5px', borderRadius: 4, color: C.up, border: `1.5px solid ${C.up}`, background: C.upBg }}>漲停</span>}
+                    {/* 跌停（綠色框） */}
+                    {isLimitDown && <span style={{ fontSize: 10, fontWeight: 900, padding: '1px 5px', borderRadius: 4, color: C.down, border: `1.5px solid ${C.down}`, background: C.downBg }}>跌停</span>}
                   </div>
                   <div style={{ fontSize: 10, color: '#475569' }}>{stock.code}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 15, fontWeight: 900, fontVariantNumeric: 'tabular-nums', color: '#e2e8f0' }}>
-                    {last.close >= 1000 ? last.close.toFixed(0) : last.close >= 100 ? last.close.toFixed(1) : last.close.toFixed(2)}
-                  </div>
-                  <div style={{ fontSize: 11, color: up ? '#22c55e' : '#ef4444', fontWeight: 700 }}>
+                  <div style={{ fontSize: 15, fontWeight: 900, fontVariantNumeric: 'tabular-nums', color: '#e2e8f0' }}>{fmtP(last.close)}</div>
+                  {/* 漲=紅 跌=綠 */}
+                  <div style={{ fontSize: 11, color: priceColor(chg), fontWeight: 700 }}>
                     {up ? '▲' : '▼'} {Math.abs(chg).toFixed(2)}%
                   </div>
                 </div>
@@ -141,20 +114,18 @@ export default function MarketTab({ sector, setSector, allSectors, onAnalyze, lo
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#475569', marginBottom: 8 }}>
-                <span>量 {(last.volume/1000).toFixed(0)}K</span>
+                <span>量 {(last.volume / 1000).toFixed(0)}K</span>
                 <span style={{ color: parseFloat(volR) > 1.5 ? '#fbbf24' : '#475569' }}>
                   {parseFloat(volR) > 1.5 ? `量增${volR}x` : `量比${volR}`}
                 </span>
-                <span>高 {last.high >= 100 ? last.high.toFixed(1) : last.high.toFixed(2)}</span>
+                <span>高 {fmtP(last.high)}</span>
               </div>
 
               <button onClick={() => onAnalyze(stock, sector)} style={{
                 width: '100%', padding: '7px', fontSize: 12, borderRadius: 7,
                 cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700,
-                background: col+'18', border: `1px solid ${col}44`, color: col,
-              }}>
-                🧠 分析
-              </button>
+                background: col + '18', border: `1px solid ${col}44`, color: col,
+              }}>🧠 分析</button>
             </div>
           )
         })}
