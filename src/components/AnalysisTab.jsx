@@ -340,6 +340,18 @@ export default function AnalysisTab({ stock, sectorKey, allSectors, analysis, bu
       )}
 
       <MarketNewsPanel sectorKey={sectorKey} stockCode={stock.code} />
+
+      {/* 虛擬下單按鈕 */}
+      {analysis && !analysis.error && analysis.signal === '買入' && (
+        <button onClick={() => onOrder && onOrder({ stock, price: analysis.entry || last.close, analysis })} style={{
+          width:'100%',padding:'12px',fontSize:14,borderRadius:10,cursor:'pointer',
+          fontFamily:'inherit',fontWeight:800,marginTop:12,
+          background:'#062020',border:'1px solid #0abab577',color:'#0abab5',
+        }}>
+          💹 虛擬下單 — 買入 {stock.name}
+        </button>
+      )}
+
       <RiskCalculator analysis={analysis} cash={cash} />
       <AlertPanel stock={stock} analysis={analysis} alerts={alerts} addAlert={addAlert} removeAlert={removeAlert} />
       <InstitutionalPanel stock={stock} />
