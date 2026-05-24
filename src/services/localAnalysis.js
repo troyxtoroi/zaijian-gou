@@ -154,9 +154,9 @@ function assessLimitUpPotential(candles, ma5, ma10, ma20, rsi14, kd, boll,
   const potential = points >= 4 ? '高' : points >= 2 ? '中' : '低'
 
   // 至少2根漲停潛力：需要高波動 + 至少3個其他正面信號
-  const can2LimitUp = signals.highVolatility && points >= 3
+  const can1LimitUp = signals.highVolatility && points >= 2
 
-  return { signals, points, potential, can2LimitUp, atrPct }
+  return { signals, points, potential, can1LimitUp, atrPct }
 }
 
 /* ── 主分析函式 ─────────────────────────────────────────── */
@@ -203,7 +203,7 @@ export function analyzeLocally({ stock, candles, ma5, ma10, ma20, sectorKey }) {
   let confidence = 45
   let limitUpSignal = false
 
-  if (lowInfo.isLow && limitUpInfo.can2LimitUp && pat.type === 'bullish') {
+  if (lowInfo.isLow && limitUpInfo.can1LimitUp && pat.type === 'bullish') {
     signal = '買入'
     // 信心度計算：多個指標加分
     let score = 50
@@ -217,7 +217,7 @@ export function analyzeLocally({ stock, candles, ma5, ma10, ma20, sectorKey }) {
     if (mktBonus.sectorScore >= 8)    score += 8
     if (stockRating?.rating?.includes('買進')) score += 5
     confidence = Math.min(92, score)
-    limitUpSignal = true
+    limitUpSignal = true  // 相對低點 + 1根漲停潛力
 
   } else if (!lowInfo.isLow && pat.type === 'bullish' && isBullishPattern) {
     // 非低點但有買入型態 → 觀望（不發信號，避免追高）
@@ -247,10 +247,10 @@ export function analyzeLocally({ stock, candles, ma5, ma10, ma20, sectorKey }) {
     if (stockRating?.target > entry) {
       target = +(entry + Math.min((stockRating.target - entry) * 0.6, atr * 4)).toFixed(2)
     } else {
-      // 預期至少2根漲停 = +10% * 2 = 20%
-      target = +(entry * 1.20).toFixed(2)
+      // 預期至少1根漲停 = +10% + 緩衝
+      target = +(entry * 1.12).toFixed(2)
     }
-    if (target <= entry) target = +(entry * 1.20).toFixed(2)
+    if (target <= entry) target = +(entry * 1.12).toFixed(2)
     if (stopLoss >= entry) stopLoss = +(entry * 0.93).toFixed(2)
 
   } else if (signal === '賣出') {
@@ -276,12 +276,12 @@ export function analyzeLocally({ stock, candles, ma5, ma10, ma20, sectorKey }) {
                     deepRebound:'跌深反彈', breakout:'突破壓力' }
       return map[k]||k
     }).filter(Boolean)
-    analysis = `✨ 低點買入信號！【${pat.name}】位於近20日低位${(lowInfo.pct*100).toFixed(0)}%，具${limitUpInfo.points}項漲停條件（${metSignals.slice(0,4).join('、')}），預期短線有機會出現2根漲停。`
+    analysis = `✨ 低點買入信號！【${pat.name}】位於近20日低位${(lowInfo.pct*100).toFixed(0)}%，具${limitUpInfo.points}項漲停條件（${metSignals.slice(0,4).join('、')}），預期短線有機會出現1根漲停（+10%）。`
   } else if (signal === '賣出') {
     analysis = `⚠️ 【${pat.name}】${trend}趨勢，RSI ${rsi14?.toFixed(0)}，建議停利或觀望。`
   } else {
     const reason = !lowInfo.isLow ? `尚未到達相對低點（位於近20日${(lowInfo.pct*100).toFixed(0)}%位置）` :
-                   !limitUpInfo.can2LimitUp ? `漲停潛力不足（${limitUpInfo.points}/8項條件，需至少3項+高波動）` :
+                   !limitUpInfo.can2LimitUp ? `漲停潛力不足（${limitUpInfo.points}/8項條件，需至少2項+高波動）` :
                    '等待更明確的多方型態確認'
     analysis = `觀望中 — ${reason}。${pat.name !== '一般K棒' ? '出現' + pat.name + '，' : ''}繼續觀察。`
   }
@@ -296,7 +296,7 @@ export function analyzeLocally({ stock, candles, ma5, ma10, ma20, sectorKey }) {
     limitUpInfo: {
       potential: limitUpInfo.potential,
       points: limitUpInfo.points,
-      can2LimitUp: limitUpInfo.can2LimitUp,
+      can2LimitUp: limitUpInfo.can1LimitUp,
       signals: limitUpInfo.signals,
       atrPct: +limitUpInfo.atrPct.toFixed(4),
     },
