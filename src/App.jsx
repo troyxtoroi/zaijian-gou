@@ -42,6 +42,7 @@ export default function App() {
   const [loadedSectors, setLoadedSectors] = useState({})
   const [loading,   setLoading]     = useState(false)
   const [analyzeMode, setAnalyzeMode] = useState('local')
+  const { alerts = [], addAlert = ()=>{}, removeAlert = ()=>{} } = usePriceAlerts(CANDLES_CACHE)
   const refreshTimer = useRef(null)
 
   const {
