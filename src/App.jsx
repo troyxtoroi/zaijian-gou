@@ -20,6 +20,7 @@ import OrderModal    from './components/OrderModal.jsx'
 import ApiKeyModal   from './components/ApiKeyModal.jsx'
 import AddStockModal from './components/AddStockModal.jsx'
 import DataManager   from './components/DataManager.jsx'
+import QuickAddPanel from './components/QuickAddPanel.jsx'
 import { usePriceAlerts } from './components/PriceAlert.jsx'
 
 const LS_KEY = 'zaijian_api_key'
@@ -41,6 +42,7 @@ export default function App() {
   const [showKey,   setShowKey]     = useState(false)
   const [showAdd,   setShowAdd]     = useState(false)
   const [showDataMgr, setShowDataMgr] = useState(false)
+  const [showQuickAdd, setShowQuickAdd] = useState(false)
   const [loadedSectors, setLoadedSectors] = useState({})
   const [loading,   setLoading]     = useState(false)
   const [analyzeMode, setAnalyzeMode] = useState('local')
@@ -280,6 +282,11 @@ export default function App() {
           background: '#151d35', border: '1px solid #1e2d4d', color: '#64748b', fontFamily: 'inherit',
         }}>⟳</button>
 
+        <button onClick={() => setShowQuickAdd(true)} style={{
+          padding: '5px 11px', fontSize: 11, borderRadius: 6, cursor: 'pointer',
+          background: '#1e2d4d', border: '1px solid #818cf855', color: '#818cf8', fontFamily: 'inherit',
+        }}>⚡ 快速加股</button>
+
         <button onClick={() => setShowDataMgr(true)} style={{
           padding: '5px 9px', fontSize: 11, borderRadius: 6, cursor: 'pointer',
           background: '#151d35', border: '1px solid #1e2d4d', color: '#64748b', fontFamily: 'inherit',
@@ -326,6 +333,13 @@ export default function App() {
 
       {orderSig && <OrderModal sig={orderSig} cash={cash} onBuy={buy} onClose={() => setOrderSig(null)} />}
       {showKey  && <ApiKeyModal onSave={k => { setApiKey(k); setShowKey(false); pop('✅ API Key 已儲存', 'buy') }} />}
+      {showQuickAdd && (
+        <QuickAddPanel
+          onAddStock={handleAddStock}
+          onClose={() => setShowQuickAdd(false)}
+        />
+      )}
+
       {showDataMgr && (
         <DataManager
           exportData={exportData} importData={importData}
