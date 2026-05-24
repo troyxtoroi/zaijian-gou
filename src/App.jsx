@@ -16,7 +16,7 @@ import AnalysisTab   from './components/AnalysisTab.jsx'
 import SignalsTab    from './components/SignalsTab.jsx'
 import PortfolioTab  from './components/PortfolioTab.jsx'
 import ScannerTab    from './components/ScannerTab.jsx'
-import OrderModal    from './components/OrderModal.jsx'
+import OrderModal, { getCapital, setCapitalLS } from './components/OrderModal.jsx'
 import ApiKeyModal   from './components/ApiKeyModal.jsx'
 import AddStockModal from './components/AddStockModal.jsx'
 import DataManager   from './components/DataManager.jsx'
@@ -34,7 +34,8 @@ export default function App() {
   const [analyses,  setAnalyses]    = useState({})
   const [signals,   setSignals]     = useState([])
   const [orderSig,  setOrderSig]    = useState(null)
-  const [cash,      setCash]        = useState(INITIAL_CAPITAL)
+  const [totalCapital, setTotalCapital] = useState(() => getCapital())
+  const [cash,      setCash]        = useState(() => getCapital())
   const [holdings,  setHoldings]    = useState([])
   const [busy,      setBusy]        = useState(false)
   const [toast,     setToast]       = useState(null)
@@ -204,16 +205,26 @@ export default function App() {
     }
   }, [analyses, busy, apiKey, analyzeMode])
 
-  const buy = (sig, shares) => {
-    const cost = sig.price * shares
+  const buy = (sig, shares, entryPrice) => {
+    const price = entryPrice || sig.price
+    const cost  = price * shares
     if (cost > cash) { pop('資金不足！', 'err'); return }
     const uid = `${sig.stock.code}-${Date.now()}`
     setCash(p => p - cost)
-    setHoldings(p => [...p, { ...sig.stock, buyPrice: sig.price, shares,
-      when: new Date(), target: sig.analysis.target, stop: sig.analysis.stopLoss, uid }])
+    setHoldings(p => [...p, { ...sig.stock, buyPrice: price, shares,
+      when: new Date(), target: sig.analysis?.target, stop: sig.analysis?.stopLoss, uid }])
     setSignals(p => p.map(s => s.id === sig.id ? { ...s, done: true } : s))
     setOrderSig(null)
-    pop(`✅ 買入 ${sig.stock.name} ${shares.toLocaleString()} 股`, 'buy')
+    pop(`✅ 買入 ${sig.stock.name} ${shares.toLocaleString()} 股 @ ${price.toFixed(1)}`, 'buy')
+    setTab('portfolio')
+  }
+
+  const setCapital = (amt) => {
+    setTotalCapital(amt)
+    setCash(amt)
+    setHoldings([])
+    setCapitalLS(amt)
+    pop(`💰 本金設定為 NT$${Math.round(amt).toLocaleString('zh-TW')}，持倉已清空`, 'buy')
   }
 
   const sell = (h) => {
@@ -305,13 +316,13 @@ export default function App() {
             analysis={selStock ? analyses[selStock.code] : null}
             busy={busy} onReanalyze={(s, sk) => doAnalyze(s, sk, true)}
             alerts={alerts} addAlert={addAlert} removeAlert={removeAlert}
-            cash={cash} />
+            cash={cash} onOrder={setOrderSig} />
         )}
         {tab === 'scanner' && (
           <ScannerTab allSectors={allSectors} onAnalyze={(s, sk) => doAnalyze(s, sk, true)} />
         )}
         {tab === 'signals'   && <SignalsTab signals={signals} onOrder={setOrderSig} />}
-        {tab === 'portfolio' && <PortfolioTab holdings={holdings} cash={cash} onSell={sell} />}
+        {tab === 'portfolio' && <PortfolioTab holdings={holdings} cash={cash} totalCapital={totalCapital} onSell={sell} onSetCapital={setCapital} />}
       </div>
 
       {orderSig && <OrderModal sig={orderSig} cash={cash} onBuy={buy} onClose={() => setOrderSig(null)} />}
