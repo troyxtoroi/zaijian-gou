@@ -300,8 +300,8 @@ export default function AnalysisTab({ stock, sectorKey, allSectors, analysis, bu
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 10 }}>
               {[
                 { l: '建議進場', v: analysis.entry,    c: '#818cf8' },
-                { l: '停損價',   v: analysis.stopLoss, c: analysis.signal === '買入' ? C.down : C.up },
-                { l: '目標價',   v: analysis.target,   c: analysis.signal === '買入' ? C.up   : C.down },
+                { l: '停損價',   v: analysis.stopLoss, c: '#22c55e' },
+                { l: '目標價',   v: analysis.target,   c: '#ef4444' },
               ].map((x, i) => (
                 <div key={i} style={{ background: '#090d1b', border: '1px solid #1e2d4d', borderRadius: 8, padding: '10px 12px' }}>
                   <div style={{ fontSize: 10, color: '#475569', marginBottom: 4 }}>{x.l}</div>
