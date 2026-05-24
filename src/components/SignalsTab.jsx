@@ -26,8 +26,8 @@ export default function SignalsTab({ signals, onOrder }) {
               <span style={{ fontSize: 11, color: '#475569', marginLeft: 6 }}>{sig.stock.code}</span>
               <span style={{
                 marginLeft: 8, padding: '2px 8px', borderRadius: 12, fontSize: 11,
-                background: '#0f2b1e', color: '#22c55e',
-                border: '1px solid #22c55e33', fontWeight: 700,
+                background: '#062020', color: '#0abab5',
+                border: '1px solid #0abab555', fontWeight: 700,
               }}>
                 {sig.analysis.signal}
               </span>
@@ -47,8 +47,8 @@ export default function SignalsTab({ signals, onOrder }) {
 
           <div style={{ display: 'flex', gap: 14, fontSize: 11, margin: '8px 0' }}>
             <span style={{ color: '#818cf8' }}>進場 {sig.analysis.entry?.toFixed?.(1) || '—'}</span>
-            <span style={{ color: '#ef4444' }}>停損 {sig.analysis.stopLoss?.toFixed?.(1) || '—'}</span>
-            <span style={{ color: '#22c55e' }}>目標 {sig.analysis.target?.toFixed?.(1) || '—'}</span>
+            <span style={{ color: '#22c55e' }}>停損 {sig.analysis.stopLoss?.toFixed?.(1) || '—'}</span>
+            <span style={{ color: '#ef4444' }}>目標 {sig.analysis.target?.toFixed?.(1) || '—'}</span>
             <span style={{ color: '#64748b' }}>信心 {sig.analysis.confidence}%</span>
           </div>
 
@@ -60,7 +60,7 @@ export default function SignalsTab({ signals, onOrder }) {
             <button onClick={() => onOrder(sig)} style={{
               width: '100%', padding: '8px', fontSize: 13, borderRadius: 7,
               cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800,
-              background: '#0f2b1e', border: '1px solid #22c55e55', color: '#22c55e',
+              background: '#062020', border: '1px solid #0abab555', color: '#0abab5',
             }}>
               🛒 確認下單
             </button>
