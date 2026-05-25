@@ -1,169 +1,181 @@
 /**
- * 股價資料服務 — 直連 Yahoo Finance（支援上市.TW / 上櫃.TWO）
- * 透過多重 CORS Proxy 嘗試，確保瀏覽器可以存取
+ * 股價資料服務 v3 — 真實資料優先，無假資料
+ * - 啟動時立即載入所有股票
+ * - 台灣市場時間內每 90 秒刷新
+ * - 多重 Proxy 確保成功率
  */
 
-/* ── 模擬資料（備援） ───────────────────────────────────── */
-function seededRandom(seed) {
-  let s = seed >>> 0
-  return () => {
-    s = Math.imul(s ^ (s >>> 16), 0x45d9f3b)
-    s = Math.imul(s ^ (s >>> 16), 0x45d9f3b)
-    return (s >>> 0) / 0xffffffff
-  }
-}
+/* ── CORS Proxy 策略 ────────────────────────────────────── */
+const PROXIES = [
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+]
 
-export function generateCandles(base, code, n = 30) {
-  const r = seededRandom(parseInt(code.slice(-3)) || 42)
-  const candles = []
-  let price = base * (0.93 + r() * 0.07)
-  const trend = r() > 0.38 ? 0.0012 : -0.0006
-  for (let i = 0; i < n; i++) {
-    const open  = price
-    const vol   = 0.022 + r() * 0.018
-    const move  = (r() - 0.47 + trend) * price * vol
-    const close = Math.max(price * 0.4, price + move)
-    const wUp   = r() * price * vol * 0.7
-    const wDn   = r() * price * vol * 0.7
-    candles.push({
-      open:   +open.toFixed(2),
-      close:  +close.toFixed(2),
-      high:   +(Math.max(open, close) + wUp).toFixed(2),
-      low:    +(Math.min(open, close) - wDn).toFixed(2),
-      volume: Math.floor((0.2 + r() * 0.8) * 60000),
-      date:   new Date(Date.now() - (n - i) * 86400000),
-    })
-    price = close
-  }
-  return candles
-}
-
-/* ── Yahoo Finance 解析 ────────────────────────────────── */
-function parseYahooResponse(text) {
-  let raw = text
-  // allorigins wraps in { contents: "..." }
-  try {
-    const w = JSON.parse(text)
-    if (w.contents) raw = w.contents
-  } catch {}
-
-  const chart = JSON.parse(raw)
-  const result = chart?.chart?.result?.[0]
-  if (!result) throw new Error('no result')
-
-  const { timestamp, indicators } = result
-  const q = indicators.quote[0]
-
-  return timestamp
-    .map((ts, i) => ({
-      date:   new Date(ts * 1000),
-      open:   parseFloat((q.open[i]  || 0).toFixed(2)),
-      high:   parseFloat((q.high[i]  || 0).toFixed(2)),
-      low:    parseFloat((q.low[i]   || 0).toFixed(2)),
-      close:  parseFloat((q.close[i] || 0).toFixed(2)),
-      volume: q.volume[i] || 0,
-    }))
-    .filter(c => c.close > 0 && !isNaN(c.close))
-}
-
-/* ── 多重 CORS Proxy ────────────────────────────────────── */
-async function fetchWithProxies(yahooUrl) {
-  const strategies = [
-    // 直接連線（部分瀏覽器/環境可能有效）
-    async () => {
-      const r = await fetch(yahooUrl, {
-        signal: AbortSignal.timeout(6000),
-        headers: { 'Accept': 'application/json' },
-      })
-      if (!r.ok) throw new Error(`direct ${r.status}`)
-      return r.text()
-    },
-    // corsproxy.io
-    async () => {
-      const r = await fetch(`https://corsproxy.io/?${encodeURIComponent(yahooUrl)}`,
-        { signal: AbortSignal.timeout(8000) })
-      if (!r.ok) throw new Error(`corsproxy ${r.status}`)
-      return r.text()
-    },
-    // allorigins raw
-    async () => {
-      const r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`,
-        { signal: AbortSignal.timeout(8000) })
-      if (!r.ok) throw new Error(`allorigins ${r.status}`)
-      return r.text()
-    },
-    // allorigins get (JSON wrapper)
-    async () => {
-      const r = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(yahooUrl)}`,
-        { signal: AbortSignal.timeout(8000) })
-      if (!r.ok) throw new Error(`allorigins-get ${r.status}`)
-      return r.text()
-    },
-    // codetabs
-    async () => {
-      const r = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(yahooUrl)}`,
-        { signal: AbortSignal.timeout(8000) })
-      if (!r.ok) throw new Error(`codetabs ${r.status}`)
-      return r.text()
-    },
-  ]
-
-  for (const strategy of strategies) {
+async function tryFetch(url, timeout = 8000) {
+  for (const makeProxy of PROXIES) {
     try {
-      const text = await strategy()
-      const candles = parseYahooResponse(text)
-      if (candles.length >= 5) return candles
+      const res = await fetch(makeProxy(url), { signal: AbortSignal.timeout(timeout) })
+      if (!res.ok) continue
+      let text = await res.text()
+      try { const w = JSON.parse(text); if (w.contents) text = w.contents } catch {}
+      return text
     } catch {}
   }
-  throw new Error('all strategies failed')
+  // 最後嘗試直連
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) })
+    if (res.ok) return res.text()
+  } catch {}
+  throw new Error('all proxies failed')
 }
 
-/* ── 取得真實 K 線（自動判斷上市/上櫃）─────────────────── */
-export async function fetchRealCandles(code, isOTC = false, days = 40) {
-  // 上市用 .TW，上櫃用 .TWO
-  const suffixes = isOTC ? ['TWO', 'TW'] : ['TW', 'TWO']
+/* ── Yahoo Finance 解析 ─────────────────────────────────── */
+function parseChart(text) {
+  const data = JSON.parse(text)
+  const r    = data?.chart?.result?.[0]
+  if (!r) throw new Error('no result')
+  const { timestamp, indicators, meta } = r
+  const q = indicators.quote[0]
+  const candles = timestamp
+    .map((ts, i) => ({
+      date:   new Date(ts * 1000),
+      open:   +((q.open[i]   || 0).toFixed(2)),
+      high:   +((q.high[i]   || 0).toFixed(2)),
+      low:    +((q.low[i]    || 0).toFixed(2)),
+      close:  +((q.close[i]  || q.adjclose?.[i] || 0).toFixed(2)),
+      volume: q.volume[i] || 0,
+    }))
+    .filter(c => c.close > 0 && c.high > 0)
+  return { candles, meta }
+}
 
+/* ── 取得個股K線（日線，自動判斷上市/上櫃）─────────────── */
+export async function fetchRealCandles(code, isOTC = false, days = 60) {
+  const suffixes = isOTC ? ['TWO','TW'] : ['TW','TWO']
   for (const suffix of suffixes) {
     try {
-      const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${code}.${suffix}?interval=1d&range=3mo`
-      const candles = await fetchWithProxies(yahooUrl)
+      const url  = `https://query1.finance.yahoo.com/v8/finance/chart/${code}.${suffix}?interval=1d&range=3mo`
+      const text = await tryFetch(url)
+      const { candles } = parseChart(text)
       if (candles.length >= 5) {
-        console.log(`✅ ${code}.${suffix}: 取得 ${candles.length} 根真實K線`)
+        console.log(`✅ ${code}.${suffix} 取得 ${candles.length} 根K線`)
         return candles.slice(-days)
       }
-    } catch (e) {
-      console.warn(`⚠️ ${code}.${suffix} 失敗: ${e.message}`)
+    } catch {}
+  }
+  throw new Error(`無法取得 ${code}`)
+}
+
+/* ── 取得即時報價（分鐘線，最新一筆） ───────────────────── */
+export async function fetchRealTimePrice(code, isOTC = false) {
+  const suffixes = isOTC ? ['TWO','TW'] : ['TW','TWO']
+  for (const suffix of suffixes) {
+    try {
+      // 用 1 分鐘 K 線取今日最新價
+      const url  = `https://query1.finance.yahoo.com/v8/finance/chart/${code}.${suffix}?interval=5m&range=1d`
+      const text = await tryFetch(url, 6000)
+      const { candles, meta } = parseChart(text)
+      if (candles.length > 0) {
+        const last = candles[candles.length - 1]
+        return { price: last.close, suffix, volume: last.volume }
+      }
+    } catch {}
+  }
+  return null
+}
+
+/* ── 全股票快取 ─────────────────────────────────────────── */
+export const CANDLES_CACHE = {}
+let _loadingCodes = new Set()
+
+/** 初始化：不填假資料，讓 UI 顯示載入中 */
+export function initCandleCache(sectors) {
+  // 清空，不填假資料
+  Object.keys(CANDLES_CACHE).forEach(k => delete CANDLES_CACHE[k])
+}
+
+/** 並發載入一批股票（最多同時 5 筆） */
+async function loadBatch(stocks, onProgress) {
+  const CONCURRENCY = 5
+  let done = 0
+  for (let i = 0; i < stocks.length; i += CONCURRENCY) {
+    const batch = stocks.slice(i, i + CONCURRENCY)
+    await Promise.allSettled(
+      batch.map(async st => {
+        try {
+          const cs = await fetchRealCandles(st.code, st.otc === true)
+          if (cs.length >= 5) {
+            CANDLES_CACHE[st.code] = cs
+            done++
+            onProgress && onProgress(done, stocks.length)
+          }
+        } catch {}
+      })
+    )
+    // Proxy 限速：批次間間隔
+    if (i + CONCURRENCY < stocks.length) await sleep(150)
+  }
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+
+/** 一次載入所有族群的股票（頁面啟動時呼叫） */
+export async function loadAllStocks(allSectors, onProgress) {
+  // 收集所有不重複的股票
+  const seen   = new Set()
+  const stocks = []
+  for (const sec of Object.values(allSectors)) {
+    for (const st of (sec.stocks || [])) {
+      if (!seen.has(st.code)) { seen.add(st.code); stocks.push(st) }
     }
   }
-  throw new Error(`無法取得 ${code} 真實資料`)
+  await loadBatch(stocks, onProgress)
+  return stocks.length
 }
 
-/* ── K 線快取 ──────────────────────────────────────────── */
-export const CANDLES_CACHE = {}
-
-export function initCandleCache(sectors) {
-  Object.values(sectors).forEach(s =>
-    s.stocks.forEach(st => {
-      CANDLES_CACHE[st.code] = generateCandles(st.base, st.code)
-    })
-  )
-}
-
+/** 載入單一族群（切換族群時用） */
 export async function loadRealCandlesForSector(stocks) {
-  const results = await Promise.allSettled(
-    stocks.map(async (st) => {
-      try {
-        const real = await fetchRealCandles(st.code, st.otc === true)
-        if (real.length >= 5) {
-          CANDLES_CACHE[st.code] = real
-          return { code: st.code, success: true, count: real.length }
-        }
-      } catch (e) {
-        return { code: st.code, success: false, error: e.message }
+  const toLoad = stocks.filter(st => !CANDLES_CACHE[st.code])
+  if (toLoad.length > 0) await loadBatch(toLoad, null)
+
+  // 已有資料的也刷新最新價（不阻塞）
+  refreshLatestPrices(stocks)
+}
+
+/** 刷新最新即時價格（非阻塞，更新 CANDLES_CACHE 最後一根K棒）*/
+export async function refreshLatestPrices(stocks) {
+  for (const st of stocks) {
+    try {
+      const rt = await fetchRealTimePrice(st.code, st.otc === true)
+      if (!rt) continue
+      const cs = CANDLES_CACHE[st.code]
+      if (!cs || !cs.length) continue
+      const last = cs[cs.length - 1]
+      // 只更新今日K棒的收盤價（若市場開盤中）
+      const today = new Date(); today.setHours(0,0,0,0)
+      const lastDate = new Date(last.date); lastDate.setHours(0,0,0,0)
+      if (lastDate.getTime() === today.getTime()) {
+        last.close = rt.price
+        if (rt.price > last.high) last.high = rt.price
+        if (rt.price < last.low)  last.low  = rt.price
       }
-    })
-  )
-  return results
+    } catch {}
+    await sleep(100)
+  }
+}
+
+/* ── 台灣市場時間判斷 ───────────────────────────────────── */
+export function isTWMarketOpen() {
+  const now = new Date()
+  // 台北時間 = UTC+8
+  const tw  = new Date(now.getTime() + 8 * 60 * 60 * 1000)
+  const day = tw.getUTCDay() // 0=週日, 6=週六
+  if (day === 0 || day === 6) return false
+  const h = tw.getUTCHours(), m = tw.getUTCMinutes()
+  const mins = h * 60 + m
+  return mins >= 9 * 60 && mins <= 13 * 60 + 30
 }
 
 /* ── 技術指標 ──────────────────────────────────────────── */
@@ -183,3 +195,6 @@ export function calcRSI(candles, period = 14) {
   const avgG = gains / period, avgL = losses / period
   return avgL === 0 ? 100 : 100 - 100 / (1 + avgG / avgL)
 }
+
+// 保留相容性
+export function generateCandles(base, code, n = 30) { return [] }
