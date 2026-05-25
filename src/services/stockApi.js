@@ -3,29 +3,33 @@
  * 策略：佔位資料秒顯示 → 背景抓真實資料 → 自動替換
  */
 
-/* ── 佔位 K 線（用真實基準價）──────────────────────────── */
+/* ── 佔位 K 線（從基準價往回推算，最後一根 = 基準價）──── */
 export function generateCandles(base, code, n = 60) {
-  const price0 = Math.max(base || 10, 1)
-  const candles = []
-  let p = price0 * (0.92 + Math.random() * 0.08)
-  for (let i = n - 1; i >= 0; i--) {
-    const chg   = (Math.random() - 0.48) * 0.022
-    const open  = p
-    const close = Math.max(p * 0.5, p * (1 + chg))
-    const hi    = Math.max(open, close) * (1 + Math.random() * 0.008)
-    const lo    = Math.min(open, close) * (1 - Math.random() * 0.008)
-    candles.push({
-      date:   new Date(Date.now() - i * 86400000),
-      open:   +open.toFixed(2),
-      close:  +close.toFixed(2),
-      high:   +hi.toFixed(2),
-      low:    +lo.toFixed(2),
-      volume: Math.floor(10000 + Math.random() * 80000),
-      isPlaceholder: true,
-    })
-    p = close
+  const basePrice = Math.max(base || 10, 1)
+  // 從基準價往回推，確保最後一根 close = basePrice 附近
+  const raw = []
+  let p = basePrice
+  for (let i = 0; i < n; i++) {
+    const vol   = 0.012 + Math.random() * 0.010   // 每日波動 1.2~2.2%
+    const chg   = (Math.random() - 0.50) * vol
+    const close = p
+    const open  = p * (1 - chg)
+    const hi    = Math.max(open, close) * (1 + Math.random() * 0.005)
+    const lo    = Math.min(open, close) * (1 - Math.random() * 0.005)
+    raw.push({ open, close, hi, lo })
+    p = open   // 往過去走
   }
-  return candles
+  // 反轉：raw[0] = 最新一根（basePrice），反轉後 candles[n-1] = 最新
+  raw.reverse()
+  return raw.map((r, i) => ({
+    date:   new Date(Date.now() - (n - 1 - i) * 86400000),
+    open:   +r.open.toFixed(2),
+    close:  +r.close.toFixed(2),
+    high:   +r.hi.toFixed(2),
+    low:    +r.lo.toFixed(2),
+    volume: Math.floor(10000 + Math.random() * 80000),
+    isPlaceholder: true,
+  }))
 }
 
 /* ── 全域 K 線快取 ──────────────────────────────────────── */
