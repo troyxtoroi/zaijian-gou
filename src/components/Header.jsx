@@ -1,6 +1,6 @@
 import { INITIAL_CAPITAL, TARGET_CAPITAL } from '../data/sectors.js'
 
-export default function Header({ totalValue, controls, loadProgress, allLoaded }) {
+export default function Header({ totalValue, controls, loading }) {
   const progress = Math.max(0, Math.min(100,
     (totalValue - INITIAL_CAPITAL) / (TARGET_CAPITAL - INITIAL_CAPITAL) * 100
   ))
