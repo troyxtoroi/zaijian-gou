@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { SECTORS, INITIAL_CAPITAL } from './data/sectors.js'
 import {
-  CANDLES_CACHE, initCandleCache, loadRealCandlesForSector,
-  generateCandles, calcMA, calcRSI,
+  CANDLES_CACHE, initCandleCache, loadAllStocks, loadRealCandlesForSector,
+  refreshLatestPrices, isTWMarketOpen, generateCandles, calcMA, calcRSI,
 } from './services/stockApi.js'
 import { analyzeLocally } from './services/localAnalysis.js'
 import { analyzeStock   } from './services/claudeApi.js'
@@ -46,6 +46,8 @@ export default function App() {
   const [showQuickAdd, setShowQuickAdd] = useState(false)
   const [loadedSectors, setLoadedSectors] = useState({})
   const [loading,   setLoading]     = useState(false)
+  const [loadProgress, setLoadProgress] = useState({ done: 0, total: 0 })
+  const [allLoaded,  setAllLoaded]    = useState(false)
   const [analyzeMode, setAnalyzeMode] = useState('local')
   const { alerts = [], addAlert = ()=>{}, removeAlert = ()=>{} } = usePriceAlerts(CANDLES_CACHE)
   const refreshTimer = useRef(null)
@@ -114,19 +116,34 @@ export default function App() {
   }, [customStockInfo, builtinExtras, customSectors])
 
   // ── 載入真實股價 ─────────────────────────────────────────────
-  const loadSector = useCallback(async sKey => {
-    const sec = allSectors[sKey]
-    if (!sec?.stocks?.length) return
-    setLoading(true)
-    await loadRealCandlesForSector(sec.stocks)
-    setLoadedSectors(p => ({ ...p, [sKey]: Date.now() }))
-    setLoading(false)
+
+
+  // 頁面啟動：一次載入所有股票真實資料
+  useEffect(() => {
+    if (Object.keys(allSectors).length === 0) return
+    setLoadProgress({ done: 0, total: 0 })
+    loadAllStocks(allSectors, (done, total) => {
+      setLoadProgress({ done, total })
+    }).then(total => {
+      setAllLoaded(true)
+      setLoadedSectors(Object.fromEntries(Object.keys(allSectors).map(k => [k, Date.now()])))
+      console.log(`✅ 全部 ${total} 檔股票載入完成`)
+    })
   }, [])
 
-  // 族群切換時載入
+  // 自動刷新：市場開盤每 90 秒，收盤每 5 分鐘
   useEffect(() => {
-    if (!loadedSectors[sector]) loadSector(sector)
-  }, [sector])
+    if (!allLoaded) return
+    const interval = isTWMarketOpen() ? 90000 : 300000
+    const timer = setInterval(() => {
+      const allStocks = Object.values(allSectors).flatMap(s => s.stocks || [])
+      const unique = [...new Map(allStocks.map(s => [s.code, s])).values()]
+      refreshLatestPrices(unique).then(() =>
+        setLoadedSectors(p => ({ ...p, _refresh: Date.now() }))
+      )
+    }, interval)
+    return () => clearInterval(timer)
+  }, [allLoaded])
 
   // 自選股加入後重新載入當前族群
   const prevExtraCountRef = useRef(0)
@@ -266,7 +283,7 @@ export default function App() {
     }}>
       <Toast toast={toast} />
 
-      <Header totalValue={totalValue} controls={<>
+      <Header totalValue={totalValue} loadProgress={loadProgress} allLoaded={allLoaded} controls={<>
         <div style={{ display:'flex', background:'#0f1628', border:'1px solid #1e2d4d', borderRadius:6, overflow:'hidden' }}>
           {[{k:'local',label:'📐 免費'},{k:'claude',label:'🤖 AI'}].map(m => (
             <button key={m.k} onClick={() => setAnalyzeMode(m.k)} style={{
