@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { SECTORS, INITIAL_CAPITAL } from './data/sectors.js'
 import {
   CANDLES_CACHE, initCandleCache, loadRealCandlesForSector,
-  isTWMarketOpen, generateCandles, calcMA, calcRSI,
+  refreshCurrentSector, isTWMarketOpen, generateCandles, calcMA, calcRSI,
 } from './services/stockApi.js'
 import { analyzeLocally } from './services/localAnalysis.js'
 import { analyzeStock   } from './services/claudeApi.js'
@@ -125,17 +125,26 @@ export default function App() {
     })
   }, [sector])
 
-  // 自動刷新（開盤 90s / 收盤 5min）
+  // 自動刷新：盤中即時更新報價（90s）/ 收盤重抓K線（5min）
   useEffect(() => {
-    const ms = isTWMarketOpen() ? 90000 : 300000
-    const t = setInterval(() => {
+    const rtTimer = setInterval(() => {
+      if (!isTWMarketOpen()) return
+      const sec = allSectors[sector]
+      if (!sec?.stocks?.length) return
+      refreshCurrentSector(sec.stocks).then(() =>
+        setLoadedSectors(p => ({ ...p, [sector]: Date.now() }))
+      )
+    }, 90000)  // 盤中每 90 秒更新即時報價
+
+    const dailyTimer = setInterval(() => {
       const sec = allSectors[sector]
       if (!sec?.stocks?.length) return
       loadRealCandlesForSector(sec.stocks).then(() =>
         setLoadedSectors(p => ({ ...p, [sector]: Date.now() }))
       )
-    }, ms)
-    return () => clearInterval(t)
+    }, 300000)  // 每 5 分鐘重抓完整K線
+
+    return () => { clearInterval(rtTimer); clearInterval(dailyTimer) }
   }, [sector])
 
   const totalValue = cash + holdings.reduce((s, h) => {
