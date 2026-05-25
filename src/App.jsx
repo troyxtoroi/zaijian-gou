@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { SECTORS, INITIAL_CAPITAL } from './data/sectors.js'
 import {
   CANDLES_CACHE, initCandleCache, loadRealCandlesForSector,
-  backgroundLoadAll, isTWMarketOpen, generateCandles, calcMA, calcRSI,
+  isTWMarketOpen, generateCandles, calcMA, calcRSI,
 } from './services/stockApi.js'
 import { analyzeLocally } from './services/localAnalysis.js'
 import { analyzeStock   } from './services/claudeApi.js'
@@ -48,7 +48,6 @@ export default function App() {
   const [loading,   setLoading]     = useState(false)
   const [analyzeMode, setAnalyzeMode] = useState('local')
   const { alerts = [], addAlert = ()=>{}, removeAlert = ()=>{} } = usePriceAlerts(CANDLES_CACHE)
-  const refreshTimer = useRef(null)
 
   const {
     customSectors, customStockInfo, builtinExtras,
@@ -113,28 +112,10 @@ export default function App() {
     })
   }, [customStockInfo, builtinExtras, customSectors])
 
-  // ── 載入真實股價 ─────────────────────────────────────────────
+  // ── 股價載入（乾淨版）──────────────────────────────────────
 
-
-  // 啟動：①佔位資料秒顯示 ②當前族群立即抓真實 ③其他背景慢載
+  // 族群切換 → 背景抓真實資料（佔位資料已秒顯示）
   useEffect(() => {
-    const sec = allSectors[sector]
-    if (!sec?.stocks?.length) return
-    // 當前族群優先真實載入
-    setLoading(true)
-    loadRealCandlesForSector(sec.stocks).then(() => {
-      setLoadedSectors(p => ({ ...p, [sector]: Date.now() }))
-      setLoading(false)
-      // 背景載入其他族群
-      backgroundLoadAll(allSectors, () => {
-        setLoadedSectors(p => ({ ...p, _bg: Date.now() }))
-      })
-    })
-  }, [])
-
-  // 族群切換：若已有真實資料就不重載
-  useEffect(() => {
-    if (loadedSectors[sector]) return
     const sec = allSectors[sector]
     if (!sec?.stocks?.length) return
     setLoading(true)
@@ -144,41 +125,17 @@ export default function App() {
     })
   }, [sector])
 
-  // 自動刷新當前族群
+  // 自動刷新（開盤 90s / 收盤 5min）
   useEffect(() => {
-    const interval = isTWMarketOpen() ? 90000 : 300000
-    const timer = setInterval(() => {
+    const ms = isTWMarketOpen() ? 90000 : 300000
+    const t = setInterval(() => {
       const sec = allSectors[sector]
       if (!sec?.stocks?.length) return
       loadRealCandlesForSector(sec.stocks).then(() =>
         setLoadedSectors(p => ({ ...p, [sector]: Date.now() }))
       )
-    }, interval)
-    return () => clearInterval(timer)
-  }, [sector])
-
-  // 自選股加入後重新載入當前族群
-  const prevExtraCountRef = useRef(0)
-  useEffect(() => {
-    const currCount = Object.values(builtinExtras).flat().length + customSectors.flatMap(s => s.stocks).length
-    if (currCount !== prevExtraCountRef.current) {
-      prevExtraCountRef.current = currCount
-      // 強制重新載入當前族群
-      setLoadedSectors(p => { const n = {...p}; delete n[sector]; return n })
-    }
-  }, [builtinExtras, customSectors])
-
-  // 自動刷新（每 5 分鐘）
-  useEffect(() => {
-    clearInterval(refreshTimer.current)
-    refreshTimer.current = setInterval(() => {
-      const sec = allSectors[sector]
-      if (!sec?.stocks?.length) return
-      loadRealCandlesForSector(sec.stocks).then(() =>
-        setLoadedSectors(p => ({ ...p, [sector]: Date.now() }))
-      )
-    }, 5 * 60 * 1000)
-    return () => clearInterval(refreshTimer.current)
+    }, ms)
+    return () => clearInterval(t)
   }, [sector])
 
   const totalValue = cash + holdings.reduce((s, h) => {
