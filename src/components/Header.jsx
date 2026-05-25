@@ -1,6 +1,6 @@
 import { INITIAL_CAPITAL, TARGET_CAPITAL } from '../data/sectors.js'
 
-export default function Header({ totalValue, controls }) {
+export default function Header({ totalValue, controls, loadProgress, allLoaded }) {
   const progress = Math.max(0, Math.min(100,
     (totalValue - INITIAL_CAPITAL) / (TARGET_CAPITAL - INITIAL_CAPITAL) * 100
   ))
@@ -25,7 +25,26 @@ export default function Header({ totalValue, controls }) {
           </div>
         </div>
 
-        {/* 控制按鈕（中間，自動換行）*/}
+        {/* 載入進度條 */}
+        {!allLoaded && loadProgress.total > 0 && (
+          <div style={{ width: '100%', marginTop: 4 }}>
+            <div style={{ height: 2, background: '#1e2d4d', borderRadius: 1 }}>
+              <div style={{
+                height: '100%', borderRadius: 1, background: '#818cf8',
+                width: `${(loadProgress.done / loadProgress.total * 100).toFixed(0)}%`,
+                transition: 'width 0.3s',
+              }} />
+            </div>
+            <div style={{ fontSize: 9, color: '#475569', marginTop: 2 }}>
+              載入真實股價 {loadProgress.done}/{loadProgress.total}
+            </div>
+          </div>
+        )}
+        {allLoaded && (
+          <div style={{ fontSize: 9, color: '#22c55e', marginTop: 2 }}>✅ 已連接 Yahoo Finance</div>
+        )}
+
+      {/* 控制按鈕（中間，自動換行）*/}
         <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center', justifyContent: 'center', minWidth: 0 }}>
           {controls}
         </div>
