@@ -1,11 +1,7 @@
 /**
- * 股價資料服務 v5
- * 資料來源優先順序：
- *   1. WantGoo (旺狗) — 台灣本地網站，無需認證
- *   2. FinMind API   — 台灣金融資料平台
- *   3. TWSE OpenAPI  — 台灣證交所
- *   4. Yahoo Finance — 透過 CORS Proxy
- *   5. 佔位資料      — 基準價往回推算，數字合理
+ * 股價資料服務 v6
+ * 主力：FinMind（歷史K線）+ TWSE mis（即時報價）
+ * 備援：TWSE 月報 → Yahoo Finance → 佔位資料
  */
 
 /* ── 佔位 K 線（從基準價往回推，最後一根=基準價）────────── */
@@ -14,26 +10,19 @@ export function generateCandles(base, code, n = 60) {
   const raw = []
   let p = b
   for (let i = 0; i < n; i++) {
-    const vol   = 0.012 + Math.random() * 0.010
-    const chg   = (Math.random() - 0.50) * vol
-    const close = p
-    const open  = p * (1 - chg)
-    raw.push({
-      open:  Math.max(open,  b * 0.3),
-      close: Math.max(close, b * 0.3),
-      hi:    Math.max(open, close) * (1 + Math.random() * 0.005),
-      lo:    Math.min(open, close) * (1 - Math.random() * 0.005),
-    })
-    p = open
+    const vol  = 0.010 + Math.random() * 0.012
+    const chg  = (Math.random() - 0.50) * vol
+    const cls  = p
+    const opn  = p * (1 - chg)
+    raw.push({ opn, cls, hi: Math.max(opn,cls)*(1+Math.random()*0.004), lo: Math.min(opn,cls)*(1-Math.random()*0.004) })
+    p = opn
   }
   raw.reverse()
-  return raw.map((r, i) => ({
-    date:   new Date(Date.now() - (n - 1 - i) * 86400000),
-    open:   +r.open.toFixed(2),
-    close:  +r.close.toFixed(2),
-    high:   +r.hi.toFixed(2),
-    low:    +r.lo.toFixed(2),
-    volume: Math.floor(10000 + Math.random() * 80000),
+  return raw.map((r,i) => ({
+    date:   new Date(Date.now() - (n-1-i)*86400000),
+    open:   +r.opn.toFixed(2), close: +r.cls.toFixed(2),
+    high:   +r.hi.toFixed(2),  low:   +r.lo.toFixed(2),
+    volume: Math.floor(10000 + Math.random()*80000),
     isPlaceholder: true,
   }))
 }
@@ -43,107 +32,89 @@ export const CANDLES_CACHE = {}
 
 export function initCandleCache(sectors) {
   Object.values(sectors).forEach(sec =>
-    (sec.stocks || []).forEach(st => {
+    (sec.stocks||[]).forEach(st => {
       if (!CANDLES_CACHE[st.code])
-        CANDLES_CACHE[st.code] = generateCandles(st.base || 50, st.code)
+        CANDLES_CACHE[st.code] = generateCandles(st.base||50, st.code)
     })
   )
 }
 
 /* ════════════════════════════════════════════════════════
-   資料來源 1 — WantGoo
-   端點：/stock/51/{code}/daily-trades
+   來源 1 — FinMind 歷史日K（免費，無需 Token）
+   https://api.finmindtrade.com/api/v4/data
 ════════════════════════════════════════════════════════ */
-async function fetchFromWantGoo(code) {
-  const end   = new Date()
-  const start = new Date(end - 90 * 86400000)
-  const fmt   = d => d.toISOString().slice(0, 10)
-  const url   = `https://www.wantgoo.com/stock/51/${code}/daily-trades?startDate=${fmt(start)}&endDate=${fmt(end)}`
+async function fetchFinMindHistory(code) {
+  const start = new Date(Date.now() - 100*86400000).toISOString().slice(0,10)
+  const url   = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${code}&start_date=${start}`
+  const res   = await fetch(url, { signal: AbortSignal.timeout(10000) })
+  if (!res.ok) throw new Error(`FinMind ${res.status}`)
+  const json  = await res.json()
+  const rows  = json?.data
+  if (!Array.isArray(rows) || rows.length < 5) throw new Error('FinMind: no data')
+  return rows.map(d => ({
+    date:   new Date(d.date),
+    open:   +d.open,
+    high:   +d.max,
+    low:    +d.min,
+    close:  +d.close,
+    volume: +(d.Trading_Volume || d.volume || 0),
+  })).filter(c => c.close > 0).slice(-60)
+}
 
+/* ════════════════════════════════════════════════════════
+   來源 2A — TWSE 即時報價（盤中用）
+   mis.twse.com.tw — 上市股
+   mis.twse.com.tw — 上櫃股 (otc_)
+════════════════════════════════════════════════════════ */
+async function fetchTWSERealTime(code, isOTC) {
+  const ex  = isOTC ? 'otc' : 'tse'
+  const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${ex}_${code}.tw&json=1&delay=0`
   const res = await fetch(url, {
     signal:  AbortSignal.timeout(8000),
-    headers: {
-      'Accept':           'application/json, text/plain, */*',
-      'Accept-Language':  'zh-TW,zh;q=0.9',
-      'Referer':          `https://www.wantgoo.com/stock/${code}`,
-    },
-    credentials: 'omit',
+    headers: { 'Referer': 'https://mis.twse.com.tw/' },
   })
-  if (!res.ok) throw new Error(`WantGoo ${res.status}`)
-  const data = await res.json()
-
-  // WantGoo 格式：[{ date, openPrice, highPrice, lowPrice, closePrice, tradeVolume }]
-  if (!Array.isArray(data) || data.length < 5) throw new Error('WantGoo empty')
-  return data
-    .map(d => ({
-      date:   new Date(d.date || d.tradingDate || d.Date),
-      open:   +(d.openPrice  || d.open  || d.Open  || 0),
-      high:   +(d.highPrice  || d.high  || d.High  || 0),
-      low:    +(d.lowPrice   || d.low   || d.Low   || 0),
-      close:  +(d.closePrice || d.close || d.Close || 0),
-      volume: +(d.tradeVolume|| d.volume|| d.Volume|| 0),
-    }))
-    .filter(c => c.close > 0)
-    .slice(-60)
-}
-
-/* ════════════════════════════════════════════════════════
-   資料來源 2 — FinMind API（台灣金融資料平台）
-════════════════════════════════════════════════════════ */
-async function fetchFromFinMind(code) {
-  const start = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10)
-  const url   = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${code}&start_date=${start}`
-
-  const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
-  if (!res.ok) throw new Error(`FinMind ${res.status}`)
-  const data = await res.json()
-
-  const records = data?.data
-  if (!Array.isArray(records) || records.length < 5) throw new Error('FinMind empty')
-  return records
-    .map(d => ({
-      date:   new Date(d.date),
-      open:   +d.open,
-      high:   +d.max,
-      low:    +d.min,
-      close:  +d.close,
-      volume: +d.Trading_Volume || 0,
-    }))
-    .filter(c => c.close > 0)
-    .slice(-60)
-}
-
-/* ════════════════════════════════════════════════════════
-   資料來源 3 — TWSE OpenAPI（證交所）
-════════════════════════════════════════════════════════ */
-async function fetchFromTWSE(code) {
-  // 抓最近兩個月日期
-  const months = []
-  for (let i = 0; i <= 2; i++) {
-    const d = new Date()
-    d.setMonth(d.getMonth() - i)
-    months.push(`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}01`)
+  if (!res.ok) throw new Error(`TWSE-RT ${res.status}`)
+  const json = await res.json()
+  const d    = json?.msgArray?.[0]
+  if (!d) throw new Error('TWSE-RT: no data')
+  // z=即時成交, o=開盤, h=最高, l=最低, y=昨收, v=成交量
+  const price = parseFloat(d.z || d.y || '0')
+  if (!price) throw new Error('TWSE-RT: no price')
+  return {
+    price,
+    open:   parseFloat(d.o || '0'),
+    high:   parseFloat(d.h || '0'),
+    low:    parseFloat(d.l || '0'),
+    volume: parseInt((d.v || '0').replace(/,/g,'')),
+    name:   d.n || '',
+    isOpen: d.z && d.z !== '-',  // z = '-' 表示未開盤
   }
+}
 
+/* ════════════════════════════════════════════════════════
+   來源 2B — TWSE 月報歷史資料（上市股備援）
+   www.twse.com.tw/exchangeReport/STOCK_DAY
+════════════════════════════════════════════════════════ */
+async function fetchTWSEMonthly(code) {
   const candles = []
-  for (const dateStr of months) {
+  for (let i = 0; i <= 2; i++) {
+    const d = new Date(); d.setMonth(d.getMonth() - i)
+    const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}01`
     try {
       const url = `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=${dateStr}&stockNo=${code}`
       const res = await fetch(url, {
-        signal: AbortSignal.timeout(6000),
-        headers: { 'Accept': 'application/json', 'Referer': 'https://www.twse.com.tw/' },
+        signal: AbortSignal.timeout(8000),
+        headers: { Referer: 'https://www.twse.com.tw/' },
       })
       if (!res.ok) continue
-      const data = await res.json()
-      if (data.stat !== 'OK' || !data.data) continue
-
-      for (const row of data.data) {
-        // row: [日期, 成交股數, 成交金額, 開盤價, 最高價, 最低價, 收盤價, 漲跌價差, 成交筆數]
-        const [dateRaw,,, open, high, low, close,,] = row
-        const [y, m, dd] = dateRaw.replace(/\//g,'-').split('-')
-        const year = parseInt(y) + 1911  // 民國年 → 西元
+      const json = await res.json()
+      if (json.stat !== 'OK' || !json.data?.length) continue
+      for (const row of json.data) {
+        const [dateRaw,,, open, high, low, close] = row
+        const parts = dateRaw.replace(/\//g,'-').split('-')
+        const year  = parseInt(parts[0]) + 1911
         candles.push({
-          date:   new Date(`${year}-${m}-${dd}`),
+          date:   new Date(`${year}-${parts[1]}-${parts[2]}`),
           open:   +open.replace(/,/g,''),
           high:   +high.replace(/,/g,''),
           low:    +low.replace(/,/g,''),
@@ -153,25 +124,60 @@ async function fetchFromTWSE(code) {
       }
     } catch {}
   }
-
-  if (candles.length < 5) throw new Error('TWSE empty')
-  return candles.filter(c => c.close > 0).sort((a,b)=>a.date-b.date).slice(-60)
+  if (candles.length < 5) throw new Error('TWSE monthly: insufficient data')
+  return candles.filter(c=>c.close>0).sort((a,b)=>a.date-b.date).slice(-60)
 }
 
 /* ════════════════════════════════════════════════════════
-   資料來源 4 — Yahoo Finance（CORS Proxy）
+   來源 2C — TPEX 月報歷史資料（上櫃股備援）
+   www.tpex.org.tw
 ════════════════════════════════════════════════════════ */
-async function fetchFromYahoo(code, isOTC) {
-  const PROXIES = [
+async function fetchTPEXMonthly(code) {
+  const candles = []
+  for (let i = 0; i <= 2; i++) {
+    const d = new Date(); d.setMonth(d.getMonth() - i)
+    const roc  = `${d.getFullYear()-1911}/${String(d.getMonth()+1).padStart(2,'0')}`
+    try {
+      const url = `https://www.tpex.org.tw/web/stock/aftertrading/daily_trading_info/st43_result.php?l=zh-tw&d=${roc}&stkno=${code}&o=json`
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+      if (!res.ok) continue
+      const json = await res.json()
+      const rows = json?.aaData
+      if (!Array.isArray(rows) || !rows.length) continue
+      for (const row of rows) {
+        // [日期, 成交股數, 成交金額, 開盤, 最高, 最低, 收盤, ...]
+        const [dateRaw,,, open, high, low, close] = row
+        const parts = dateRaw.trim().split('/')
+        const year  = parseInt(parts[0]) + 1911
+        candles.push({
+          date:   new Date(`${year}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`),
+          open:   +open.replace(/,/g,''),
+          high:   +high.replace(/,/g,''),
+          low:    +low.replace(/,/g,''),
+          close:  +close.replace(/,/g,''),
+          volume: 0,
+        })
+      }
+    } catch {}
+  }
+  if (candles.length < 5) throw new Error('TPEX monthly: insufficient data')
+  return candles.filter(c=>c.close>0).sort((a,b)=>a.date-b.date).slice(-60)
+}
+
+/* ════════════════════════════════════════════════════════
+   來源 3 — Yahoo Finance（CORS Proxy 備援）
+════════════════════════════════════════════════════════ */
+async function fetchYahoo(code, isOTC) {
+  const suffixes = isOTC ? ['TWO','TW'] : ['TW','TWO']
+  const proxies  = [
     u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
     u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
   ]
-  const suffixes = isOTC ? ['TWO','TW'] : ['TW','TWO']
   for (const suf of suffixes) {
     const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${code}.${suf}?interval=1d&range=3mo`
-    for (const makeProxy of PROXIES) {
+    for (const mkProxy of proxies) {
       try {
-        const res = await fetch(makeProxy(yahooUrl), { signal: AbortSignal.timeout(8000) })
+        const res = await fetch(mkProxy(yahooUrl), { signal: AbortSignal.timeout(8000) })
         if (!res.ok) continue
         let text = await res.text()
         try { const w = JSON.parse(text); if (w.contents) text = w.contents } catch {}
@@ -180,35 +186,33 @@ async function fetchFromYahoo(code, isOTC) {
         if (!r) continue
         const { timestamp, indicators } = r
         const q = indicators.quote[0]
-        const cs = timestamp.map((ts, i) => ({
-          date:   new Date(ts * 1000),
-          open:   +((q.open[i]  || 0).toFixed(2)),
-          high:   +((q.high[i]  || 0).toFixed(2)),
-          low:    +((q.low[i]   || 0).toFixed(2)),
-          close:  +((q.close[i] || 0).toFixed(2)),
-          volume: q.volume[i] || 0,
-        })).filter(c => c.close > 0)
+        const cs = timestamp.map((ts,i) => ({
+          date:   new Date(ts*1000),
+          open:   +((q.open[i]  ||0).toFixed(2)),
+          high:   +((q.high[i]  ||0).toFixed(2)),
+          low:    +((q.low[i]   ||0).toFixed(2)),
+          close:  +((q.close[i] ||0).toFixed(2)),
+          volume: q.volume[i]||0,
+        })).filter(c=>c.close>0)
         if (cs.length >= 5) return cs.slice(-60)
       } catch {}
     }
   }
-  throw new Error('Yahoo failed')
+  throw new Error('Yahoo: all failed')
 }
 
-/* ── 主要抓取函式（多來源容錯）──────────────────────────── */
+/* ── 主要抓取：歷史日K ──────────────────────────────────── */
 export async function fetchRealCandles(code, isOTC = false) {
-  // 依序嘗試各資料來源
   const sources = [
-    { name: 'WantGoo',  fn: () => fetchFromWantGoo(code) },
-    { name: 'FinMind',  fn: () => fetchFromFinMind(code) },
-    { name: 'TWSE',     fn: () => fetchFromTWSE(code)  },
-    { name: 'Yahoo',    fn: () => fetchFromYahoo(code, isOTC) },
+    { name: 'FinMind',    fn: () => fetchFinMindHistory(code) },
+    { name: isOTC?'TPEX':'TWSE', fn: () => isOTC ? fetchTPEXMonthly(code) : fetchTWSEMonthly(code) },
+    { name: 'Yahoo',      fn: () => fetchYahoo(code, isOTC) },
   ]
   for (const src of sources) {
     try {
       const cs = await src.fn()
-      if (cs && cs.length >= 5) {
-        console.log(`✅ ${code} 來自 ${src.name}，${cs.length} 根`)
+      if (cs?.length >= 5) {
+        console.log(`✅ ${code} ← ${src.name} (${cs.length}根)`)
         return cs
       }
     } catch (e) {
@@ -218,32 +222,65 @@ export async function fetchRealCandles(code, isOTC = false) {
   return null
 }
 
+/* ── 即時報價更新（盤中每 90 秒）────────────────────────── */
+export async function updateRealTimePrice(code, isOTC) {
+  try {
+    const rt = await fetchTWSERealTime(code, isOTC)
+    if (!rt?.price) return false
+    const cs = CANDLES_CACHE[code]
+    if (!cs?.length) return false
+    const today = new Date(); today.setHours(0,0,0,0)
+    const last  = cs[cs.length-1]
+    const lastDay = new Date(last.date); lastDay.setHours(0,0,0,0)
+    if (lastDay.getTime() === today.getTime()) {
+      // 更新今日K棒
+      if (rt.price > 0) last.close = rt.price
+      if (rt.high  > 0) last.high  = Math.max(last.high, rt.high)
+      if (rt.low   > 0 && rt.low < last.low) last.low = rt.low
+      if (rt.open  > 0) last.open  = rt.open
+    }
+    return true
+  } catch { return false }
+}
+
+/* ── 批次載入族群 ───────────────────────────────────────── */
 export async function loadRealCandlesForSector(stocks) {
+  // 5筆並發，不塞爆 API
+  const BATCH = 5
+  for (let i = 0; i < stocks.length; i += BATCH) {
+    await Promise.allSettled(
+      stocks.slice(i, i+BATCH).map(async st => {
+        const cs = await fetchRealCandles(st.code, st.otc === true)
+        if (cs?.length >= 5) CANDLES_CACHE[st.code] = cs
+      })
+    )
+    if (i + BATCH < stocks.length) await new Promise(r => setTimeout(r, 200))
+  }
+}
+
+/* ── 盤中即時更新所有當前族群 ────────────────────────────── */
+export async function refreshCurrentSector(stocks) {
   await Promise.allSettled(
-    stocks.map(async st => {
-      const cs = await fetchRealCandles(st.code, st.otc === true)
-      if (cs && cs.length >= 5) CANDLES_CACHE[st.code] = cs
-    })
+    stocks.map(st => updateRealTimePrice(st.code, st.otc === true))
   )
 }
 
 export function isTWMarketOpen() {
-  const tw  = new Date(Date.now() + 8 * 3600000)
+  const tw  = new Date(Date.now() + 8*3600000)
   const day = tw.getUTCDay()
   if (day === 0 || day === 6) return false
-  const m = tw.getUTCHours() * 60 + tw.getUTCMinutes()
+  const m = tw.getUTCHours()*60 + tw.getUTCMinutes()
   return m >= 540 && m <= 810
 }
 
 /* ── 技術指標 ──────────────────────────────────────────── */
 export function calcMA(candles, period) {
   if (!candles || candles.length < period) return null
-  return candles.slice(-period).reduce((s, c) => s + c.close, 0) / period
+  return candles.slice(-period).reduce((s,c) => s+c.close, 0) / period
 }
-
 export function calcRSI(candles, period = 14) {
-  const sl = candles.slice(-(period + 1))
-  if (sl.length < period + 1) return null
+  const sl = candles.slice(-(period+1))
+  if (sl.length < period+1) return null
   let g = 0, l = 0
   for (let i = 1; i < sl.length; i++) {
     const d = sl[i].close - sl[i-1].close
