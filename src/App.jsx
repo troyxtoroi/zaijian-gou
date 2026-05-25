@@ -134,7 +134,7 @@ export default function App() {
       refreshCurrentSector(sec.stocks).then(() =>
         setLoadedSectors(p => ({ ...p, [sector]: Date.now() }))
       )
-    }, 90000)  // 盤中每 90 秒更新即時報價
+    }, 5000)   // 盤中每 5 秒更新即時報價
 
     const dailyTimer = setInterval(() => {
       const sec = allSectors[sector]
