@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { SECTORS, INITIAL_CAPITAL } from './data/sectors.js'
 import {
   CANDLES_CACHE, initCandleCache, loadRealCandlesForSector,
-  refreshCurrentSector, isTWMarketOpen, generateCandles, calcMA, calcRSI,
+  updateRealTimePrice, isTWMarketOpen, generateCandles, calcMA, calcRSI,
 } from './services/stockApi.js'
 import { analyzeLocally } from './services/localAnalysis.js'
 import { analyzeStock   } from './services/claudeApi.js'
@@ -125,16 +125,25 @@ export default function App() {
     })
   }, [sector])
 
-  // 自動刷新：盤中即時更新報價（90s）/ 收盤重抓K線（5min）
+  // 自動刷新：盤中每5秒輪流更新1支股票（不同時打全部）
   useEffect(() => {
-    const rtTimer = setInterval(() => {
-      if (!isTWMarketOpen()) return
+    let idx = 0
+    let busy = false
+
+    const rtTimer = setInterval(async () => {
+      if (!isTWMarketOpen() || busy) return
       const sec = allSectors[sector]
-      if (!sec?.stocks?.length) return
-      refreshCurrentSector(sec.stocks).then(() =>
+      const stocks = sec?.stocks
+      if (!stocks?.length) return
+      busy = true
+      try {
+        const st = stocks[idx % stocks.length]
+        idx++
+        await updateRealTimePrice(st.code, st.otc === true)
         setLoadedSectors(p => ({ ...p, [sector]: Date.now() }))
-      )
-    }, 5000)   // 盤中每 5 秒更新即時報價
+      } catch {}
+      busy = false
+    }, 5000)
 
     const dailyTimer = setInterval(() => {
       const sec = allSectors[sector]
@@ -142,7 +151,7 @@ export default function App() {
       loadRealCandlesForSector(sec.stocks).then(() =>
         setLoadedSectors(p => ({ ...p, [sector]: Date.now() }))
       )
-    }, 300000)  // 每 5 分鐘重抓完整K線
+    }, 300000)
 
     return () => { clearInterval(rtTimer); clearInterval(dailyTimer) }
   }, [sector])
