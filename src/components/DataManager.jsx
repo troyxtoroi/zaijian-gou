@@ -131,7 +131,7 @@ export default function DataManager({ exportData, importData, diagnose,
                 未找到自動備份。請開啟瀏覽器開發者工具確認：<br/>
                 按 F12 → Console → 輸入以下指令：<br/>
                 <code style={{ background:'#151d35',padding:'6px 10px',borderRadius:6,display:'block',marginTop:6,fontSize:11,color:'#818cf8' }}>
-                  JSON.stringify(Object.fromEntries([...Array(localStorage.length)].map((_,i)=>[localStorage.key(i),localStorage.getItem(localStorage.key(i))])))
+                  {`JSON.stringify(Object.fromEntries([...Array(localStorage.length)].map((_,i)=>[localStorage.key(i),localStorage.getItem(localStorage.key(i))])))`}
                 </code>
                 <br/>把結果貼到「貼上備份」頁面
               </div>
