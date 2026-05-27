@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { SECTORS, INITIAL_CAPITAL } from './data/sectors.js'
 import {
   CANDLES_CACHE, initCandleCache, loadRealCandlesForSector,
-  updateRealTimePrice, isTWMarketOpen, generateCandles, calcMA, calcRSI,
+  updateRealTimePrice, updateAllRealTime, isTWMarketOpen, generateCandles, calcMA, calcRSI,
 } from './services/stockApi.js'
 import { analyzeLocally } from './services/localAnalysis.js'
 import { analyzeStock   } from './services/claudeApi.js'
@@ -125,25 +125,21 @@ export default function App() {
     })
   }, [sector])
 
-  // 自動刷新：盤中每5秒輪流更新1支股票（不同時打全部）
+  // 自動刷新：盤中每5秒批次更新族群所有股票（一次API搞定）
   useEffect(() => {
-    let idx = 0
     let busy = false
 
     const rtTimer = setInterval(async () => {
       if (!isTWMarketOpen() || busy) return
       const sec = allSectors[sector]
-      const stocks = sec?.stocks
-      if (!stocks?.length) return
+      if (!sec?.stocks?.length) return
       busy = true
       try {
-        const st = stocks[idx % stocks.length]
-        idx++
-        await updateRealTimePrice(st.code, st.otc === true)
+        await updateAllRealTime(sec.stocks)
         setLoadedSectors(p => ({ ...p, [sector]: Date.now() }))
       } catch {}
       busy = false
-    }, 5000)
+    }, 5000)  // ← 每5秒，所有股票同時更新
 
     const dailyTimer = setInterval(() => {
       const sec = allSectors[sector]
