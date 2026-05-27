@@ -222,25 +222,68 @@ export async function fetchRealCandles(code, isOTC = false) {
   return null
 }
 
-/* ── 即時報價更新（盤中每 90 秒）────────────────────────── */
+/* ── 即時報價：單股更新（備用）─────────────────────────── */
 export async function updateRealTimePrice(code, isOTC) {
   try {
     const rt = await fetchTWSERealTime(code, isOTC)
     if (!rt?.price) return false
-    const cs = CANDLES_CACHE[code]
-    if (!cs?.length) return false
-    const today = new Date(); today.setHours(0,0,0,0)
-    const last  = cs[cs.length-1]
-    const lastDay = new Date(last.date); lastDay.setHours(0,0,0,0)
-    if (lastDay.getTime() === today.getTime()) {
-      // 更新今日K棒
-      if (rt.price > 0) last.close = rt.price
-      if (rt.high  > 0) last.high  = Math.max(last.high, rt.high)
-      if (rt.low   > 0 && rt.low < last.low) last.low = rt.low
-      if (rt.open  > 0) last.open  = rt.open
-    }
+    applyRealTimeToCache(code, rt)
     return true
   } catch { return false }
+}
+
+/* ── 即時報價：批次更新所有股票（一次 API 搞定）──────────── */
+export async function updateAllRealTime(stocks) {
+  if (!stocks?.length) return
+
+  // 上市/上櫃分開，各用一個 API call
+  const listed = stocks.filter(s => !s.otc)
+  const otc    = stocks.filter(s =>  s.otc)
+
+  async function batchFetch(list, exchange) {
+    if (!list.length) return
+    try {
+      const ex_ch = list.map(s => `${exchange}_${s.code}.tw`).join('|')
+      const url   = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${ex_ch}&json=1&delay=0`
+      const res   = await fetch(url, {
+        signal:  AbortSignal.timeout(6000),
+        headers: { Referer: 'https://mis.twse.com.tw/' },
+      })
+      if (!res.ok) return
+      const json = await res.json()
+      for (const d of (json?.msgArray || [])) {
+        const code  = d.c
+        const price = parseFloat(d.z || d.y || '0')
+        if (!code || !price) continue
+        applyRealTimeToCache(code, {
+          price,
+          open:   parseFloat(d.o || '0'),
+          high:   parseFloat(d.h || '0'),
+          low:    parseFloat(d.l || '0'),
+          volume: parseInt((d.v||'0').replace(/,/g,'')),
+        })
+      }
+    } catch {}
+  }
+
+  await Promise.all([
+    batchFetch(listed, 'tse'),
+    batchFetch(otc,    'otc'),
+  ])
+}
+
+function applyRealTimeToCache(code, rt) {
+  const cs = CANDLES_CACHE[code]
+  if (!cs?.length) return
+  const last    = cs[cs.length - 1]
+  const today   = new Date(); today.setHours(0,0,0,0)
+  const lastDay = new Date(last.date); lastDay.setHours(0,0,0,0)
+  if (lastDay.getTime() === today.getTime()) {
+    if (rt.price > 0) last.close = rt.price
+    if (rt.high  > 0) last.high  = Math.max(last.high, rt.high)
+    if (rt.low   > 0 && rt.low < last.low) last.low = rt.low
+    if (rt.open  > 0) last.open  = rt.open
+  }
 }
 
 /* ── 批次載入族群 ───────────────────────────────────────── */
